@@ -15,12 +15,12 @@ import svgpathtools
 
 START_X = 100
 START_Y = 70
+START = complex(START_X, START_Y)
 MAX_X = 100
 MAX_Y = 200
 NORMAL_FEEDRATE = 500
 TRAVEL_FEEDRATE = 4000
 CURVE_RESOLUTION = 50
-OVER_CUT = 0.2
 
 HEADER = (
     f"; Generated with SVG gcode generator at {datetime.datetime.now().timestamp()}\n\n"
@@ -118,69 +118,41 @@ def get_scale(paths: tuple[list[svgpathtools.Path]]) -> tuple[float, float]:
     raise RuntimeError("Could not calculate scale")
 
 
-def get_overcut(start_point: complex, current_point: complex) -> complex:
-    """
-    Draws straight line between 2 points with overlap to account for blade offset
-
-    Args:
-        start_point: point to connect to
-        current_point: point to connect from
-    """
-
-    distance = math.dist(
-        (current_point.real, current_point.imag), (start_point.real, start_point.imag)
-    )
-
-    vector: complex = (start_point - current_point) / distance
-
-    return current_point + distance * vector
-
-
-def line_to_gcode(line: svgpathtools.Line, scale: float, raised: bool) -> list[str]:
+def line_to_points(line: svgpathtools.Line, scale: float) -> list[complex]:
     """
     Converts a line to gcode commands
 
     Args:
         line: line to generate gcode for
         scale: scale factor
-        raised: if the Z axis is raised or lowered
 
     Returns:
-        gcode command generated
+        points calculated
     """
-    gcode = []
-    if raised:
-        gcode.append(LIFT_GCODE)
-        gcode.append(f"G0 F{TRAVEL_FEEDRATE}\n")
-        gcode.append(
-            f"G1 X{START_X + line.start.real * scale} Y{START_Y + line.start.imag * scale}\n"
-        )
-        gcode.append(f"G0 F{NORMAL_FEEDRATE}\n")
-        gcode.append(UNLIFT_GCODE)
-    gcode.append(
-        f"G1 X{START_X + line.end.real * scale} Y{START_Y + line.end.imag * scale}\n"
-    )
-    return gcode
+
+    return [
+        START + line.start * scale,
+        START + line.end * scale,
+    ]
 
 
-def arc_to_gcode(arc: svgpathtools.Arc, scale: float, raised: bool) -> tuple[complex]:
+def arc_to_points(arc: svgpathtools.Arc, scale: float) -> list[complex]:
     """
     Converts a arc to gcode commands
 
     Args:
         arc: line to generate gcode for
         scale: scale factor
-        raised: if the Z axis is raised or lowered
 
     Returns:
-        gcode command generated
+        points calculated
     """
 
-    # Function to solve for center and angles
+    exp_phi = np.exp(1j * np.radians(arc.rotation))
+
     def ellipse_system(variables):
         xc, yc, t1, t2 = variables
         c = xc + 1j * yc
-        exp_phi = np.exp(1j * np.radians(arc.rotation))
         rhs1 = c + arc.radius * np.exp(1j * t1) * exp_phi
         rhs2 = c + arc.radius * np.exp(1j * t2) * exp_phi
         return [
@@ -203,104 +175,84 @@ def arc_to_gcode(arc: svgpathtools.Arc, scale: float, raised: bool) -> tuple[com
 
     if theta2 < theta1:
         theta2 += 2 * np.pi
-    arc_points: np.ndarray = center + arc.radius * np.exp(
-        1j * np.linspace(theta1, theta2, CURVE_RESOLUTION)
-    ) * np.exp(1j * np.radians(arc.rotation))
 
-    gcode = []
-
-    for point in arc_points:
-        if raised:
-            gcode.append(LIFT_GCODE)
-            gcode.append(f"G0 F{TRAVEL_FEEDRATE}\n")
-            gcode.append(
-                f"G1 X{START_X + point.real * scale} Y{START_Y + point.imag * scale}\n"
-            )
-            gcode.append(f"G0 F{NORMAL_FEEDRATE}\n")
-            gcode.append(UNLIFT_GCODE)
-            raised = False
-        gcode.append(
-            f"G1 X{START_X + point.real * scale} Y{START_Y + point.imag * scale}\n"
-        )
-    return gcode
+    arc_points: list[complex] = list(
+        START + (center + arc.radius * np.exp(1j * theta) * exp_phi) * scale
+        for theta in np.linspace(theta1, theta2, CURVE_RESOLUTION)
+    )
+    return arc_points
 
 
-def quadricbezier_to_gcode(
-    curve: svgpathtools.QuadraticBezier, scale: float, raised: bool
-) -> list[str]:
+def quadricbezier_to_points(
+    curve: svgpathtools.QuadraticBezier, scale: float
+) -> list[complex]:
     """
     Converts a quadratic bezier curve to gcode commands
 
     Args:
         curve: curve to generate gcode for
         scale: scale factor
-        raised: if the Z axis is raised or lowered
 
     Returns:
-        gcode command generated
+        points calculated
     """
-    gcode = []
 
-    for t in np.linspace(0, 1, CURVE_RESOLUTION):
-        x: float = (
+    def get_point(t: float) -> complex:
+        point = complex(
             (1 - t) ** 2 * curve.start.real
             + 2 * (1 - t) * t * curve.control.real
-            + t**2 * curve.end.real
-        )
-        y: float = (
+            + t**2 * curve.end.real,
             (1 - t) ** 2 * curve.start.imag
             + 2 * (1 - t) * t * curve.control.imag
-            + t**2 * curve.end.imag
+            + t**2 * curve.end.imag,
         )
-        if raised:
-            gcode.append(LIFT_GCODE)
-            gcode.append(f"G0 F{TRAVEL_FEEDRATE}\n")
-            gcode.append(f"G1 X{START_X + x * scale} Y{START_Y + y * scale}\n")
-            gcode.append(f"G0 F{NORMAL_FEEDRATE}\n")
-            gcode.append(UNLIFT_GCODE)
-            raised = False
-        gcode.append(f"G1 X{START_X + x * scale} Y{START_Y + y * scale}\n")
-    return gcode
+        return START + (point * scale)
+
+    return [get_point(t) for t in np.linspace(0, 1, CURVE_RESOLUTION)]
 
 
-def cubicbezier_to_gcode(
-    curve: svgpathtools.CubicBezier, scale: float, raised: bool
-) -> list[str]:
+def cubicbezier_to_points(
+    curve: svgpathtools.CubicBezier, scale: float
+) -> list[complex]:
     """
     Converts a cubic bezier curve to gcode commands
 
     Args:
         curve: curve to generate gcode for
         scale: scale factor
-        raised: if the Z axis is raised or lowered
 
     Returns:
-        gcode command generated
+        points calculated
     """
-    gcode = []
 
-    for t in np.linspace(0, 1, CURVE_RESOLUTION):
-        x: float = (
+    def get_point(t: float) -> complex:
+        point = complex(
             (1 - t) ** 3 * curve.start.real
             + 3 * (1 - t) ** 2 * t * curve.control1.real
             + 3 * (1 - t) * t**2 * curve.control2.real
-            + t**3 * curve.end.real
-        )
-        y: float = (
+            + t**3 * curve.end.real,
             (1 - t) ** 3 * curve.start.imag
             + 3 * (1 - t) ** 2 * t * curve.control1.imag
             + 3 * (1 - t) * t**2 * curve.control2.imag
-            + t**3 * curve.end.imag
+            + t**3 * curve.end.imag,
         )
+        return START + (point * scale)
 
+    return [get_point(t) for t in np.linspace(0, 1, CURVE_RESOLUTION)]
+
+
+def points_to_gcode(points: list[complex], raised: bool):
+    """"""
+    gcode = []
+    for point in points:
         if raised:
             gcode.append(LIFT_GCODE)
             gcode.append(f"G0 F{TRAVEL_FEEDRATE}\n")
-            gcode.append(f"G1 X{START_X + x * scale} Y{START_Y + y * scale}\n")
+            gcode.append(f"G1 X{point.real} Y{point.imag}\n")
             gcode.append(f"G0 F{NORMAL_FEEDRATE}\n")
             gcode.append(UNLIFT_GCODE)
             raised = False
-        gcode.append(f"G1 X{START_X + x * scale} Y{START_Y + y * scale}\n")
+        gcode.append(f"G1 X{point.real} Y{point.imag}\n")
     return gcode
 
 
@@ -311,29 +263,34 @@ def generate_gcode(svg_path: pathlib.Path):
     Args:
         svg_path: path to SVG file
     """
-    gcode: list[str] = [HEADER]
-    gcode.extend(START_GCODE)
 
     parsed = svgpathtools.svg2paths(svg_path)
     paths: tuple[list[svgpathtools.Path]] = parsed[0]
     x_scale, y_scale = get_scale(paths)
     scale = x_scale if x_scale < y_scale else y_scale
 
-    start_point = None
+    gcode: list[str] = [HEADER]
+    gcode.extend(START_GCODE)
+
+    new_points: list[complex] = []
     prev_end: complex = complex(0, 0)
     raised = False
     for path in paths:
         for subpath in path:
+
             if prev_end != subpath.start:
                 raised = True
+
             if isinstance(subpath, svgpathtools.Line):
-                gcode.extend(line_to_gcode(subpath, scale, raised))
+                new_points = line_to_points(subpath, scale)
             elif isinstance(subpath, svgpathtools.Arc):
-                gcode.extend(arc_to_gcode(subpath, scale, raised))
+                new_points = arc_to_points(subpath, scale)
             elif isinstance(subpath, svgpathtools.QuadraticBezier):
-                gcode.extend(quadricbezier_to_gcode(subpath, scale, raised))
+                new_points = quadricbezier_to_points(subpath, scale)
             elif isinstance(subpath, svgpathtools.CubicBezier):
-                gcode.extend(cubicbezier_to_gcode(subpath, scale, raised))
+                new_points = cubicbezier_to_points(subpath, scale)
+
+            gcode.extend(points_to_gcode(new_points, raised))
 
             raised = False
             prev_end = subpath.end
