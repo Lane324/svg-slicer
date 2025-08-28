@@ -1,0 +1,33 @@
+[project]
+name = "svg2gcode"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Lane324", email = "lanetaylor2013@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "lxml>=6.0.0",
+    "lxml-stubs>=0.5.1",
+    "matplotlib>=3.10.5",
+    "numpy>=2.3.2",
+    "rich>=14.1.0",
+    "scipy>=1.16.1",
+    "svgpathtools>=1.7.1",
+]
+
+[project.scripts]
+svg2gcode = "svg2gcode.gcode_generator:main"
+
+[build-system]
+requires = ["uv_build>=0.8.8,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "isort>=6.0.1",
+    "pylint>=3.3.8",
+    "pytest>=8.4.1",
+]
