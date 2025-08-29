@@ -8,10 +8,8 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "lxml>=6.0.0",
-    "lxml-stubs>=0.5.1",
-    "matplotlib>=3.10.5",
     "numpy>=2.3.2",
+    "pyside6>=6.9.2",
     "rich>=14.1.0",
     "scipy>=1.16.1",
     "svgpathtools>=1.7.1",
@@ -26,8 +24,13 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "pytest-cov>=6.0.0",
     "black>=25.1.0",
     "isort>=6.0.1",
     "pylint>=3.3.8",
     "pytest>=8.4.1",
 ]
+
+[tool.pytest.ini_options]
+addopts = "--cov=svg2gcode --cov-branch --cov-report xml tests --cov-report term-missing"
+testpaths = ["tests"]

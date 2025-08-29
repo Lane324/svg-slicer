@@ -13,35 +13,60 @@ import rich
 import scipy.optimize
 import svgpathtools
 
-START_X = 100
-START_Y = 70
+START_X = 10
+START_Y = 10
 START = complex(START_X, START_Y)
 MAX_X = 100
-MAX_Y = 200
+MAX_Y = 50
 NORMAL_FEEDRATE = 500
 TRAVEL_FEEDRATE = 4000
 CURVE_RESOLUTION = 50
 
-HEADER = (
-    f"; Generated with SVG gcode generator at {datetime.datetime.now().timestamp()}\n\n"
-)
+HEADER = [
+    f"; Generated with SVG gcode generator at {datetime.datetime.now().timestamp()}",
+    "",
+    "",
+]
 START_GCODE = [
-    "; start\n",
-    "M107 ; turn fan off\n",
-    "G21 ; use millimeter\n",
-    "G90 ; absolute coordinates\n",
-    "M82 ; absolute E coordinates\n",
-    "G92 E0 ; set E to 0\n",
-    "G28 X Y Z ; home xyz axes\n",
-    f"G1 F{NORMAL_FEEDRATE} ; set feedrate\n",
-    "\n\n",
+    "; start",
+    "M107 ; turn fan off",
+    "G21 ; use millimeter",
+    "G90 ; absolute coordinates",
+    "M82 ; absolute E coordinates",
+    "G92 E0 ; set E to 0",
+    "G28 X Y Z ; home xyz axes",
+    f"G1 F{NORMAL_FEEDRATE} ; set feedrate",
+    "",
 ]
 END_GCODE = [
-    "; end\n",
-    "DISPLAY\n",
+    "; end",
+    "DISPLAY",
 ]
-LIFT_GCODE = "G1 Z10\n"
-UNLIFT_GCODE = "G1 Z0\n"
+LIFT_GCODE = "G1 Z10"
+UNLIFT_GCODE = "G1 Z0"
+
+
+class GcodePoint:
+    def __init__(self, point: complex, raised: bool):
+        """"""
+        self.point: complex = point
+        self.raised: bool = raised
+
+    def get_gcode(self, scale: float) -> list[str]:
+        """"""
+        corrected_x = self.point.real * scale + START_X
+        corrected_y = self.point.imag * scale + START_Y
+        if self.raised:
+            gcode = [
+                LIFT_GCODE,
+                f"G0 F{TRAVEL_FEEDRATE}",
+                f"G1 X{corrected_x} Y{corrected_y}",
+                f"G0 F{NORMAL_FEEDRATE}",
+                UNLIFT_GCODE,
+            ]
+        else:
+            gcode = [f"G1 X{corrected_x} Y{corrected_y}"]
+        return gcode
 
 
 # pylint: disable=too-many-return-statements
@@ -55,9 +80,6 @@ def get_direction(start: complex, end: complex) -> float:
 
     Returns:
         direction from start to end in degrees
-
-    Raises:
-        failed to calculate a valid direction
     """
     vector = end - start
 
@@ -84,68 +106,75 @@ def get_direction(start: complex, end: complex) -> float:
             return 180 + degrees  # quadrant 3
         return 270 - degrees  # quadrant 4
 
-    raise RuntimeError("Invalid degree calculated")
+    return 0.0
 
 
-def get_scale(paths: tuple[list[svgpathtools.Path]]) -> tuple[float, float]:
+def get_scale(x: float, y: float) -> float:
     """
     Gets scale factor to resize SVG to fit within MAX_X and MAX_Y
 
     Args:
-        paths: paths inside SVG file
+        x: x value
+        y: y value
 
     Returns:
-        X and Y scale factor
+        The smallest of the X or Y scale factor
     """
-    if not MAX_X and not MAX_Y:
-        return (1.0, 1.0)
 
-    biggest_x: float = 0.0
-    biggest_y: float = 0.0
-    for path in paths:
-        for line in path:
-            for coord in (line.start, line.end):
-                biggest_x = max(biggest_x, coord.real)
-                biggest_y = max(biggest_y, coord.imag)
+    x_scale: float | None = None
+    y_scale: float | None = None
 
-    if MAX_X and MAX_Y:
-        return (MAX_X / biggest_x, MAX_Y / biggest_y)
-    if MAX_X and not MAX_Y:
-        return (MAX_X / biggest_x, 1)
-    if not MAX_X and MAX_Y:
-        return (1, MAX_Y / biggest_y)
+    if MAX_X:
+        x_scale = MAX_X / x
+    if MAX_Y:
+        y_scale = MAX_Y / y
 
-    raise RuntimeError("Could not calculate scale")
+    if x_scale and y_scale:
+        return x_scale if x_scale < y_scale else y_scale
+    if x_scale and not y_scale:
+        return x_scale
+    if not x_scale and y_scale:
+        return y_scale
+
+    return 1.0
 
 
-def line_to_points(line: svgpathtools.Line, scale: float) -> list[complex]:
+def line_to_points(line: svgpathtools.Line) -> tuple[list[complex], float, float]:
     """
     Converts a line to gcode commands
 
     Args:
         line: line to generate gcode for
-        scale: scale factor
 
     Returns:
-        points calculated
+        points calculated and largest x coord and y coord
     """
 
-    return [
-        START + line.start * scale,
-        START + line.end * scale,
-    ]
+    largest_x = line.start.real if line.start.real > line.end.real else line.end.real
+    largest_y = line.start.imag if line.start.imag > line.end.imag else line.end.imag
+
+    return (
+        [
+            line.start,
+            line.end,
+        ],
+        largest_x,
+        largest_y,
+    )
 
 
-def arc_to_points(arc: svgpathtools.Arc, scale: float) -> list[complex]:
+def arc_to_points(arc: svgpathtools.Arc) -> tuple[list[complex], float, float]:
     """
     Converts a arc to gcode commands
 
     Args:
         arc: line to generate gcode for
-        scale: scale factor
 
     Returns:
-        points calculated
+        points calculated and largest x coord and y coord
+
+    Raises:
+        RuntimeError: could not determine the largest X or Y coordinate
     """
 
     exp_phi = np.exp(1j * np.radians(arc.rotation))
@@ -176,29 +205,45 @@ def arc_to_points(arc: svgpathtools.Arc, scale: float) -> list[complex]:
     if theta2 < theta1:
         theta2 += 2 * np.pi
 
-    arc_points: list[complex] = list(
-        START + (center + arc.radius * np.exp(1j * theta) * exp_phi) * scale
-        for theta in np.linspace(theta1, theta2, CURVE_RESOLUTION)
-    )
-    return arc_points
+    largest_x: float | None = None
+    largest_y: float | None = None
+    arc_points: list[complex] = []
+    for theta in np.linspace(theta1, theta2, CURVE_RESOLUTION):
+        point: complex = center + arc.radius * np.exp(1j * theta) * exp_phi
+        arc_points.append(point)
+        if not largest_x or point.real > largest_x:
+            largest_x = point.real
+        if not largest_y or point.real > largest_y:
+            largest_y = point.real
+
+    if not largest_x or not largest_y:
+        raise RuntimeError("Could not find largest X or Y coordinate.")
+
+    return (arc_points, largest_x, largest_y)
 
 
 def quadricbezier_to_points(
-    curve: svgpathtools.QuadraticBezier, scale: float
-) -> list[complex]:
+    curve: svgpathtools.QuadraticBezier,
+) -> tuple[list[complex], float, float]:
     """
     Converts a quadratic bezier curve to gcode commands
 
     Args:
         curve: curve to generate gcode for
-        scale: scale factor
 
     Returns:
-        points calculated
+        points calculated and largest x coord and y coord
+
+    Raises:
+        RuntimeError: could not determine the largest X or Y coordinate
     """
 
+    largest_x: float | None = None
+    largest_y: float | None = None
+
     def get_point(t: float) -> complex:
-        point = complex(
+        nonlocal largest_x, largest_y
+        point: complex = complex(
             (1 - t) ** 2 * curve.start.real
             + 2 * (1 - t) * t * curve.control.real
             + t**2 * curve.end.real,
@@ -206,27 +251,46 @@ def quadricbezier_to_points(
             + 2 * (1 - t) * t * curve.control.imag
             + t**2 * curve.end.imag,
         )
-        return START + (point * scale)
 
-    return [get_point(t) for t in np.linspace(0, 1, CURVE_RESOLUTION)]
+        if not largest_x or point.real > largest_x:
+            largest_x = point.real
+        if not largest_y or point.real > largest_y:
+            largest_y = point.real
+        return point
+
+    points: list[complex] = [get_point(t) for t in np.linspace(0, 1, CURVE_RESOLUTION)]
+    if not largest_x or not largest_y:
+        raise RuntimeError("Could not find largest X or Y coordinate.")
+
+    return (
+        points,
+        largest_x,
+        largest_y,
+    )
 
 
 def cubicbezier_to_points(
-    curve: svgpathtools.CubicBezier, scale: float
-) -> list[complex]:
+    curve: svgpathtools.CubicBezier,
+) -> tuple[list[complex], float, float]:
     """
     Converts a cubic bezier curve to gcode commands
 
     Args:
         curve: curve to generate gcode for
-        scale: scale factor
 
     Returns:
-        points calculated
+        points calculated and largest x coord and y coord
+
+    Raises:
+        RuntimeError: could not determine the largest X or Y coordinate
     """
 
+    largest_x: float | None = None
+    largest_y: float | None = None
+
     def get_point(t: float) -> complex:
-        point = complex(
+        nonlocal largest_x, largest_y
+        point: complex = complex(
             (1 - t) ** 3 * curve.start.real
             + 3 * (1 - t) ** 2 * t * curve.control1.real
             + 3 * (1 - t) * t**2 * curve.control2.real
@@ -236,24 +300,91 @@ def cubicbezier_to_points(
             + 3 * (1 - t) * t**2 * curve.control2.imag
             + t**3 * curve.end.imag,
         )
-        return START + (point * scale)
 
-    return [get_point(t) for t in np.linspace(0, 1, CURVE_RESOLUTION)]
+        if not largest_x or point.real > largest_x:
+            largest_x = point.real
+        if not largest_y or point.real > largest_y:
+            largest_y = point.real
+        return point
+
+    points: list[complex] = [get_point(t) for t in np.linspace(0, 1, CURVE_RESOLUTION)]
+    if not largest_x or not largest_y:
+        raise RuntimeError("Could not find largest X or Y coordinate.")
+
+    return (
+        points,
+        largest_x,
+        largest_y,
+    )
 
 
-def points_to_gcode(points: list[complex], raised: bool):
-    """"""
-    gcode = []
+def make_gcode_points(points: list[complex], raised: bool) -> list[GcodePoint]:
+    """
+    Constructs GcodePoints from complex numbers
+
+    Args:
+        points: point to create
+        raised: travel to next point raised
+
+    Returns:
+        gcode_points: GcodePoints
+    """
+    gcode_points: list[GcodePoint] = []
     for point in points:
-        if raised:
-            gcode.append(LIFT_GCODE)
-            gcode.append(f"G0 F{TRAVEL_FEEDRATE}\n")
-            gcode.append(f"G1 X{point.real} Y{point.imag}\n")
-            gcode.append(f"G0 F{NORMAL_FEEDRATE}\n")
-            gcode.append(UNLIFT_GCODE)
+        gcode_points.append(GcodePoint(point, raised))
+        raised = False
+    return gcode_points
+
+
+def get_points(
+    paths: tuple[list[svgpathtools.Path]],
+) -> tuple[list[GcodePoint], float, float]:
+    """
+    Gets all points on paths
+
+    Args:
+        paths: paths to get points for
+
+    Returns:
+        all_points: gcode points found
+    """
+    largest_x: float = 0.0
+    largest_y: float = 0.0
+    all_points: list[GcodePoint] = []
+    new_points: list[complex]
+    prev_end: complex = complex(0, 0)
+
+    raised = False
+    for path in paths:
+        for subpath in path:
+            if prev_end != subpath.start:
+                raised = True
+
+            if isinstance(subpath, svgpathtools.Line):
+                new_points, new_largest_x, new_largest_y = line_to_points(subpath)
+            elif isinstance(subpath, svgpathtools.Arc):
+                new_points, new_largest_x, new_largest_y = arc_to_points(subpath)
+            elif isinstance(subpath, svgpathtools.QuadraticBezier):
+                new_points, new_largest_x, new_largest_y = quadricbezier_to_points(
+                    subpath
+                )
+            elif isinstance(subpath, svgpathtools.CubicBezier):
+                new_points, new_largest_x, new_largest_y = cubicbezier_to_points(
+                    subpath
+                )
+            else:
+                continue
+
+            if new_largest_x > largest_x:
+                largest_x = new_largest_x
+            if new_largest_y > largest_y:
+                largest_y = new_largest_y
+
+            all_points.extend(make_gcode_points(new_points, raised))
             raised = False
-        gcode.append(f"G1 X{point.real} Y{point.imag}\n")
-    return gcode
+            prev_end = subpath.end
+
+    return (all_points, largest_x, largest_y)
 
 
 def generate_gcode(svg_path: pathlib.Path):
@@ -266,49 +397,35 @@ def generate_gcode(svg_path: pathlib.Path):
 
     parsed = svgpathtools.svg2paths(svg_path)
     paths: tuple[list[svgpathtools.Path]] = parsed[0]
-    x_scale, y_scale = get_scale(paths)
-    scale = x_scale if x_scale < y_scale else y_scale
 
-    gcode: list[str] = [HEADER]
+    gcode: list[str] = []
+    gcode.extend(HEADER)
     gcode.extend(START_GCODE)
 
-    new_points: list[complex] = []
-    prev_end: complex = complex(0, 0)
-    raised = False
-    for path in paths:
-        for subpath in path:
+    points, largest_x, largest_y = get_points(paths)
 
-            if prev_end != subpath.start:
-                raised = True
-
-            if isinstance(subpath, svgpathtools.Line):
-                new_points = line_to_points(subpath, scale)
-            elif isinstance(subpath, svgpathtools.Arc):
-                new_points = arc_to_points(subpath, scale)
-            elif isinstance(subpath, svgpathtools.QuadraticBezier):
-                new_points = quadricbezier_to_points(subpath, scale)
-            elif isinstance(subpath, svgpathtools.CubicBezier):
-                new_points = cubicbezier_to_points(subpath, scale)
-
-            gcode.extend(points_to_gcode(new_points, raised))
-
-            raised = False
-            prev_end = subpath.end
+    scale = get_scale(largest_x, largest_y)
+    for point in points:
+        gcode.extend(point.get_gcode(scale))
 
     gcode.extend(END_GCODE)
 
-    gcode_path = pathlib.Path.cwd() / f"{svg_path.stem}.gcode"
-    with gcode_path.open("w") as f:
-        f.writelines(gcode)
-    rich.print(f"Created gcode file at [yellow]{gcode_path}[/yellow]")
+    return gcode
+
+
+def save_gcode(path: pathlib.Path, gcode: list[str]):
+    """"""
+    with path.open("w") as f:
+        for line in gcode:
+            f.write(line + "\n")
+    rich.print(f"Created gcode file at [yellow]{path}[/yellow]")
 
 
 def main():
     """
     Main entry point
     """
-    generate_gcode(pathlib.Path(sys.argv[1]))
-
-
-if __name__ == "__main__":
-    main()
+    svg_path = pathlib.Path(sys.argv[1])
+    gcode = generate_gcode(svg_path)
+    gcode_path = pathlib.Path.cwd() / f"{svg_path.stem}.gcode"
+    save_gcode(gcode_path, gcode)
