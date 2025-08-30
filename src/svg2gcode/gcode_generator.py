@@ -387,7 +387,7 @@ def get_points(
     return (all_points, largest_x, largest_y)
 
 
-def generate_gcode(svg_path: pathlib.Path):
+def generate_gcode(svg_path: pathlib.Path) -> tuple[list[str], list[GcodePoint]]:
     """
     Converts SVG to gcode
 
@@ -410,7 +410,7 @@ def generate_gcode(svg_path: pathlib.Path):
 
     gcode.extend(END_GCODE)
 
-    return gcode
+    return (gcode, points)
 
 
 def save_gcode(path: pathlib.Path, gcode: list[str]):
@@ -426,6 +426,6 @@ def main():
     Main entry point
     """
     svg_path = pathlib.Path(sys.argv[1])
-    gcode = generate_gcode(svg_path)
+    gcode, points = generate_gcode(svg_path)
     gcode_path = pathlib.Path.cwd() / f"{svg_path.stem}.gcode"
     save_gcode(gcode_path, gcode)
