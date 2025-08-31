@@ -13,5 +13,6 @@ coverage.xml
 # Virtual environments
 .venv
 
-*.gcode
-*.svg
+options/*.toml
+gcode/*.gcode
+svg/*.svg

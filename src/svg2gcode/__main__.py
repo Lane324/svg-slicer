@@ -1,16 +1,11 @@
-# Copyright (C) 2022 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
-from __future__ import annotations
+"""GUI app for svg2gcode"""
 
 import pathlib
 import sys
 
-from matplotlib.backends.backend_qtagg import FigureCanvas
-from matplotlib.figure import Figure
-from mpl_toolkits.mplot3d import axes3d
-from PySide6.QtCore import QFile, QSaveFile, Qt, QTextStream, Slot
-from PySide6.QtGraphs import QScatter3DSeries
-from PySide6.QtGraphsWidgets import Q3DScatterWidgetItem
+from PySide6.QtCore import QFile, QSaveFile, QTextStream, Slot
+
+# pylint: disable=no-name-in-module
 from PySide6.QtSvgWidgets import QGraphicsSvgItem
 from PySide6.QtWidgets import (
     QApplication,
@@ -28,10 +23,17 @@ from PySide6.QtWidgets import (
 )
 
 from svg2gcode import gcode_generator, gcode_viewer
+from svg2gcode.gcode_generator import GcodeGenerator
+from svg2gcode.slicing_options import SlicingOptionsWiget
 
 
 class MainWindow(QMainWindow):
+    """Main window for GUI app"""
+
+    # pylint: disable=too-many-instance-attributes
+
     def __init__(self):
+        """Creates MainWindow"""
         super().__init__()
 
         self.setWindowTitle("Gcode Generator")
@@ -39,7 +41,11 @@ class MainWindow(QMainWindow):
         self.setUnifiedTitleAndToolBarOnMac(True)
 
         self.selected_svg: pathlib.Path | None = None
-        self.gcode: list[str] | None = None
+
+        self.slicing_options_widget = SlicingOptionsWiget()
+        self.gcode_generator: GcodeGenerator = GcodeGenerator(
+            self.slicing_options_widget.options
+        )
         self.points: list[gcode_generator.GcodePoint] | None = None
 
         # Widgets
@@ -59,6 +65,7 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.addTab(self.svg_viewer, "SVG")
         self.tabs.addTab(self.gcode_viewer, "Gcode")
+        self.tabs.addTab(self.slicing_options_widget, "Options")
 
         # Connections
         self.select_file_button.clicked.connect(self.select_svg)
@@ -95,7 +102,7 @@ class MainWindow(QMainWindow):
             return
 
         self.selected_svg = pathlib.Path(selected_files[0])
-        self.selected_file_label.setText(str(self.selected_svg))
+        self.selected_file_label.setText(f"Selected file: {str(self.selected_svg)}")
         svg_item = QGraphicsSvgItem(str(self.selected_svg))
         self.svg_scene.clear()
         self.svg_scene.addItem(svg_item)
@@ -108,13 +115,15 @@ class MainWindow(QMainWindow):
             return
 
         self.statusBar().showMessage("Gcode generation started...")
-        self.gcode, self.points = gcode_generator.generate_gcode(self.selected_svg)
-        self.statusBar().showMessage("Gcode generated!")
-        self.gcode_viewer.load_gcode(self.gcode)
+        self.slicing_options_widget.update_options()
+        self.gcode_generator.update_options(self.slicing_options_widget.options)
+        self.gcode_generator.generate_gcode(self.selected_svg)
+        self.statusBar().showMessage("Gcode generated!", 2000)
+        self.gcode_viewer.load_gcode(self.gcode_generator.gcode)
 
     @Slot()
     def save_file(self):
-        if not self.gcode:
+        if not self.gcode_generator.gcode:
             return
 
         fileName, _ = QFileDialog.getSaveFileName(
@@ -130,7 +139,7 @@ class MainWindow(QMainWindow):
         file = QSaveFile(fileName)
         if file.open(QFile.OpenModeFlag.WriteOnly | QFile.OpenModeFlag.Text):
             outf = QTextStream(file)
-            string = "\n".join(self.gcode)
+            string = "\n".join(self.gcode_generator.gcode)
             _ = outf << string
 
             if not file.commit():
@@ -155,9 +164,15 @@ class MainWindow(QMainWindow):
         self._file_menu.addAction("Exit", self.close)
 
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for svg2gcode"""
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
     window = MainWindow()
-    window.resize(500, 500)
+    window.showMaximized()
     window.show()
     app.exec()
+
+
+if __name__ == "__main__":
+    main()

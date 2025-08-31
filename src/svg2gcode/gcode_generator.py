@@ -13,412 +13,349 @@ import rich
 import scipy.optimize
 import svgpathtools
 
-START_X = 10
-START_Y = 10
-START = complex(START_X, START_Y)
-MAX_X = 100
-MAX_Y = 50
-NORMAL_FEEDRATE = 500
-TRAVEL_FEEDRATE = 4000
-CURVE_RESOLUTION = 50
+from svg2gcode.slicing_options import SlicingOptions
 
 HEADER = [
     f"; Generated with SVG gcode generator at {datetime.datetime.now().timestamp()}",
     "",
     "",
 ]
-START_GCODE = [
-    "; start",
-    "M107 ; turn fan off",
-    "G21 ; use millimeter",
-    "G90 ; absolute coordinates",
-    "M82 ; absolute E coordinates",
-    "G92 E0 ; set E to 0",
-    "G28 X Y Z ; home xyz axes",
-    f"G1 F{NORMAL_FEEDRATE} ; set feedrate",
-    "",
-]
-END_GCODE = [
-    "; end",
-    "DISPLAY",
-]
-LIFT_GCODE = "G1 Z10"
-UNLIFT_GCODE = "G1 Z0"
 
 
+# pylint: disable=too-few-public-methods
 class GcodePoint:
+    """Holds data about a point in gcode"""
+
     def __init__(self, point: complex, raised: bool):
-        """"""
+        """
+        Creates a GcodePoint
+
+        Args:
+            point: XY coordinate
+            raised: if the Z axis is raised
+        """
         self.point: complex = point
         self.raised: bool = raised
 
-    def get_gcode(self, scale: float) -> list[str]:
-        """"""
-        corrected_x = self.point.real * scale + START_X
-        corrected_y = self.point.imag * scale + START_Y
+    def get_gcode(self, scale: float, options: SlicingOptions) -> list[str]:
+        """
+        Turns GcodePoint into gcode commands
+
+        Args:
+            scale: scale factor to apply to coordinates
+
+        Returns:
+            gcode commands
+        """
+        corrected_x = self.point.real * scale + options.start_point.real
+        corrected_y = self.point.imag * scale + options.start_point.imag
         if self.raised:
             gcode = [
-                LIFT_GCODE,
-                f"G0 F{TRAVEL_FEEDRATE}",
+                *options.lift_gcode,
+                f"G0 F{options.travel_feedrate}",
                 f"G1 X{corrected_x} Y{corrected_y}",
-                f"G0 F{NORMAL_FEEDRATE}",
-                UNLIFT_GCODE,
+                f"G0 F{options.normal_feedrate}",
+                *options.unlift_gcode,
             ]
         else:
             gcode = [f"G1 X{corrected_x} Y{corrected_y}"]
         return gcode
 
 
-# pylint: disable=too-many-return-statements
-def get_direction(start: complex, end: complex) -> float:
-    """
-    Gets the direction between 2 points
+class GcodeGenerator:
+    """Generate gcode from an SVG file"""
 
-    Args:
-        start: start of segment
-        end: end of segment
+    def __init__(self, slicing_options: SlicingOptions):
+        """
+        Creates GcodeGenerator
 
-    Returns:
-        direction from start to end in degrees
-    """
-    vector = end - start
+        Args:
+            slicing_options: options for slicing
+        """
+        self.options = slicing_options
+        self.largest_x: float = 0.0
+        self.largest_y: float = 0.0
+        self.gcode: list[str] = []
+        self.points: list[GcodePoint] = []
 
-    if vector.imag == 0 and vector.real == 0:
+    # pylint: disable=too-many-return-statements
+    def _get_direction(self, start: complex, end: complex) -> float:
+        """
+        Gets the direction between 2 points
+
+        Args:
+            start: start of segment
+            end: end of segment
+
+        Returns:
+            direction from start to end in degrees
+        """
+        vector = end - start
+
+        if vector.imag == 0 and vector.real == 0:
+            return 0.0
+        if vector.imag == 0 and vector.real > 0:
+            return 0.0
+        if vector.real == 0 and vector.imag > 0:
+            return 90.0
+        if vector.imag == 0 and vector.real < 0:
+            return 180.0
+        if vector.real == 0 and vector.imag < 0:
+            return 270.0
+
+        degrees = math.degrees(math.atan(vector.imag / vector.real))
+
+        if vector.imag > 0:
+            if vector.real > 0:
+                return degrees  # quadrant 1
+            return 180 + degrees  # quadrant 2
+
+        if vector.imag < 0:
+            if vector.real < 0:
+                return 180 + degrees  # quadrant 3
+            return 270 - degrees  # quadrant 4
+
         return 0.0
-    if vector.imag == 0 and vector.real > 0:
-        return 0.0
-    if vector.real == 0 and vector.imag > 0:
-        return 90.0
-    if vector.imag == 0 and vector.real < 0:
-        return 180.0
-    if vector.real == 0 and vector.imag < 0:
-        return 270.0
 
-    degrees = math.degrees(math.atan(vector.imag / vector.real))
+    def _get_scale(self) -> float:
+        """
+        Gets scale factor to resize SVG to fit within max x and y
 
-    if vector.imag > 0:
-        if vector.real > 0:
-            return degrees  # quadrant 1
-        return 180 + degrees  # quadrant 2
+        Args:
+            x: x value
+            y: y value
 
-    if vector.imag < 0:
-        if vector.real < 0:
-            return 180 + degrees  # quadrant 3
-        return 270 - degrees  # quadrant 4
+        Returns:
+            The smallest of the X or Y scale factor
+        """
 
-    return 0.0
+        if not self.largest_x and not self.largest_y:
+            return 1.0
 
+        x_scale: float = 1.0
+        y_scale: float = 1.0
 
-def get_scale(x: float, y: float) -> float:
-    """
-    Gets scale factor to resize SVG to fit within MAX_X and MAX_Y
+        if self.options.max_point:
+            x_scale = self.options.max_point.real / self.largest_x
+            y_scale = self.options.max_point.imag / self.largest_y
 
-    Args:
-        x: x value
-        y: y value
+        return min(x_scale, y_scale)
 
-    Returns:
-        The smallest of the X or Y scale factor
-    """
+    def _line_to_points(self, line: svgpathtools.Line) -> list[complex]:
+        """
+        Converts a line to points
 
-    x_scale: float | None = None
-    y_scale: float | None = None
+        Args:
+            line: line to generate gcode for
 
-    if MAX_X:
-        x_scale = MAX_X / x
-    if MAX_Y:
-        y_scale = MAX_Y / y
+        Returns:
+            points calculated
+        """
 
-    if x_scale and y_scale:
-        return x_scale if x_scale < y_scale else y_scale
-    if x_scale and not y_scale:
-        return x_scale
-    if not x_scale and y_scale:
-        return y_scale
+        self.largest_x = max(self.largest_x, line.start.real)
+        self.largest_y = max(self.largest_y, line.start.imag)
 
-    return 1.0
+        return [line.start, line.end]
 
+    def _arc_to_points(self, arc: svgpathtools.Arc) -> list[complex]:
+        """
+        Converts a arc to points
 
-def line_to_points(line: svgpathtools.Line) -> tuple[list[complex], float, float]:
-    """
-    Converts a line to gcode commands
+        Args:
+            arc: line to generate gcode for
 
-    Args:
-        line: line to generate gcode for
+        Returns:
+            points calculated
+        """
 
-    Returns:
-        points calculated and largest x coord and y coord
-    """
+        exp_phi = np.exp(1j * np.radians(arc.rotation))
 
-    largest_x = line.start.real if line.start.real > line.end.real else line.end.real
-    largest_y = line.start.imag if line.start.imag > line.end.imag else line.end.imag
+        def ellipse_system(variables):
+            xc, yc, t1, t2 = variables
+            c = xc + 1j * yc
+            rhs1 = c + arc.radius * np.exp(1j * t1) * exp_phi
+            rhs2 = c + arc.radius * np.exp(1j * t2) * exp_phi
+            return [
+                np.real(rhs1 - arc.start),
+                np.imag(rhs1 - arc.start),
+                np.real(rhs2 - arc.end),
+                np.imag(rhs2 - arc.end),
+            ]
 
-    return (
-        [
-            line.start,
-            line.end,
-        ],
-        largest_x,
-        largest_y,
-    )
+        mid = (arc.start + arc.end) / 2
+        initial = [mid.real, mid.imag, 0, np.pi / 2]
 
+        xc, yc, theta1, theta2 = scipy.optimize.fsolve(ellipse_system, initial)
 
-def arc_to_points(arc: svgpathtools.Arc) -> tuple[list[complex], float, float]:
-    """
-    Converts a arc to gcode commands
+        xc = cast(int, xc)
+        yc = cast(int, yc)
 
-    Args:
-        arc: line to generate gcode for
+        center = xc + 1j * yc
 
-    Returns:
-        points calculated and largest x coord and y coord
+        if theta2 < theta1:
+            theta2 += 2 * np.pi
 
-    Raises:
-        RuntimeError: could not determine the largest X or Y coordinate
-    """
+        arc_points: list[complex] = []
+        for theta in np.linspace(theta1, theta2, self.options.curve_resolution):
+            point: complex = center + arc.radius * np.exp(1j * theta) * exp_phi
+            arc_points.append(point)
+            self.largest_x = max(self.largest_x, point.real)
+            self.largest_y = max(self.largest_y, point.imag)
 
-    exp_phi = np.exp(1j * np.radians(arc.rotation))
+        return arc_points
 
-    def ellipse_system(variables):
-        xc, yc, t1, t2 = variables
-        c = xc + 1j * yc
-        rhs1 = c + arc.radius * np.exp(1j * t1) * exp_phi
-        rhs2 = c + arc.radius * np.exp(1j * t2) * exp_phi
-        return [
-            np.real(rhs1 - arc.start),
-            np.imag(rhs1 - arc.start),
-            np.real(rhs2 - arc.end),
-            np.imag(rhs2 - arc.end),
+    def _quadricbezier_to_points(
+        self, curve: svgpathtools.QuadraticBezier
+    ) -> list[complex]:
+        """
+        Converts a quadratic bezier curve to gcode commands
+
+        Args:
+            curve: curve to generate gcode for
+
+        Returns:
+            points calculated
+        """
+
+        def get_point(t: float) -> complex:
+            point: complex = complex(
+                (1 - t) ** 2 * curve.start.real
+                + 2 * (1 - t) * t * curve.control.real
+                + t**2 * curve.end.real,
+                (1 - t) ** 2 * curve.start.imag
+                + 2 * (1 - t) * t * curve.control.imag
+                + t**2 * curve.end.imag,
+            )
+
+            self.largest_x = max(self.largest_x, point.real)
+            self.largest_y = max(self.largest_y, point.imag)
+            return point
+
+        points: list[complex] = [
+            get_point(t) for t in np.linspace(0, 1, self.options.curve_resolution)
         ]
 
-    mid = (arc.start + arc.end) / 2
-    initial = [mid.real, mid.imag, 0, np.pi / 2]
+        return points
 
-    solution = scipy.optimize.fsolve(ellipse_system, initial)
-    xc, yc, theta1, theta2 = solution
+    def _cubicbezier_to_points(self, curve: svgpathtools.CubicBezier) -> list[complex]:
+        """
+        Converts a cubic bezier curve to points
 
-    xc = cast(int, xc)
-    yc = cast(int, yc)
+        Args:
+            curve: curve to generate gcode for
 
-    center = xc + 1j * yc
+        Returns:
+            points calculated
+        """
 
-    if theta2 < theta1:
-        theta2 += 2 * np.pi
+        def get_point(t: float) -> complex:
+            point: complex = complex(
+                (1 - t) ** 3 * curve.start.real
+                + 3 * (1 - t) ** 2 * t * curve.control1.real
+                + 3 * (1 - t) * t**2 * curve.control2.real
+                + t**3 * curve.end.real,
+                (1 - t) ** 3 * curve.start.imag
+                + 3 * (1 - t) ** 2 * t * curve.control1.imag
+                + 3 * (1 - t) * t**2 * curve.control2.imag
+                + t**3 * curve.end.imag,
+            )
 
-    largest_x: float | None = None
-    largest_y: float | None = None
-    arc_points: list[complex] = []
-    for theta in np.linspace(theta1, theta2, CURVE_RESOLUTION):
-        point: complex = center + arc.radius * np.exp(1j * theta) * exp_phi
-        arc_points.append(point)
-        if not largest_x or point.real > largest_x:
-            largest_x = point.real
-        if not largest_y or point.real > largest_y:
-            largest_y = point.real
+            self.largest_x = max(self.largest_x, point.real)
+            self.largest_y = max(self.largest_y, point.imag)
+            return point
 
-    if not largest_x or not largest_y:
-        raise RuntimeError("Could not find largest X or Y coordinate.")
+        points: list[complex] = [
+            get_point(t) for t in np.linspace(0, 1, self.options.curve_resolution)
+        ]
 
-    return (arc_points, largest_x, largest_y)
+        return points
 
+    def _extend_gcode_points(self, new_points: list[complex], raised: bool):
+        """
+        Extends self.points from complex numbers
 
-def quadricbezier_to_points(
-    curve: svgpathtools.QuadraticBezier,
-) -> tuple[list[complex], float, float]:
-    """
-    Converts a quadratic bezier curve to gcode commands
-
-    Args:
-        curve: curve to generate gcode for
-
-    Returns:
-        points calculated and largest x coord and y coord
-
-    Raises:
-        RuntimeError: could not determine the largest X or Y coordinate
-    """
-
-    largest_x: float | None = None
-    largest_y: float | None = None
-
-    def get_point(t: float) -> complex:
-        nonlocal largest_x, largest_y
-        point: complex = complex(
-            (1 - t) ** 2 * curve.start.real
-            + 2 * (1 - t) * t * curve.control.real
-            + t**2 * curve.end.real,
-            (1 - t) ** 2 * curve.start.imag
-            + 2 * (1 - t) * t * curve.control.imag
-            + t**2 * curve.end.imag,
-        )
-
-        if not largest_x or point.real > largest_x:
-            largest_x = point.real
-        if not largest_y or point.real > largest_y:
-            largest_y = point.real
-        return point
-
-    points: list[complex] = [get_point(t) for t in np.linspace(0, 1, CURVE_RESOLUTION)]
-    if not largest_x or not largest_y:
-        raise RuntimeError("Could not find largest X or Y coordinate.")
-
-    return (
-        points,
-        largest_x,
-        largest_y,
-    )
-
-
-def cubicbezier_to_points(
-    curve: svgpathtools.CubicBezier,
-) -> tuple[list[complex], float, float]:
-    """
-    Converts a cubic bezier curve to gcode commands
-
-    Args:
-        curve: curve to generate gcode for
-
-    Returns:
-        points calculated and largest x coord and y coord
-
-    Raises:
-        RuntimeError: could not determine the largest X or Y coordinate
-    """
-
-    largest_x: float | None = None
-    largest_y: float | None = None
-
-    def get_point(t: float) -> complex:
-        nonlocal largest_x, largest_y
-        point: complex = complex(
-            (1 - t) ** 3 * curve.start.real
-            + 3 * (1 - t) ** 2 * t * curve.control1.real
-            + 3 * (1 - t) * t**2 * curve.control2.real
-            + t**3 * curve.end.real,
-            (1 - t) ** 3 * curve.start.imag
-            + 3 * (1 - t) ** 2 * t * curve.control1.imag
-            + 3 * (1 - t) * t**2 * curve.control2.imag
-            + t**3 * curve.end.imag,
-        )
-
-        if not largest_x or point.real > largest_x:
-            largest_x = point.real
-        if not largest_y or point.real > largest_y:
-            largest_y = point.real
-        return point
-
-    points: list[complex] = [get_point(t) for t in np.linspace(0, 1, CURVE_RESOLUTION)]
-    if not largest_x or not largest_y:
-        raise RuntimeError("Could not find largest X or Y coordinate.")
-
-    return (
-        points,
-        largest_x,
-        largest_y,
-    )
-
-
-def make_gcode_points(points: list[complex], raised: bool) -> list[GcodePoint]:
-    """
-    Constructs GcodePoints from complex numbers
-
-    Args:
-        points: point to create
-        raised: travel to next point raised
-
-    Returns:
-        gcode_points: GcodePoints
-    """
-    gcode_points: list[GcodePoint] = []
-    for point in points:
-        gcode_points.append(GcodePoint(point, raised))
-        raised = False
-    return gcode_points
-
-
-def get_points(
-    paths: tuple[list[svgpathtools.Path]],
-) -> tuple[list[GcodePoint], float, float]:
-    """
-    Gets all points on paths
-
-    Args:
-        paths: paths to get points for
-
-    Returns:
-        all_points: gcode points found
-    """
-    largest_x: float = 0.0
-    largest_y: float = 0.0
-    all_points: list[GcodePoint] = []
-    new_points: list[complex]
-    prev_end: complex = complex(0, 0)
-
-    raised = False
-    for path in paths:
-        for subpath in path:
-            if prev_end != subpath.start:
-                raised = True
-
-            if isinstance(subpath, svgpathtools.Line):
-                new_points, new_largest_x, new_largest_y = line_to_points(subpath)
-            elif isinstance(subpath, svgpathtools.Arc):
-                new_points, new_largest_x, new_largest_y = arc_to_points(subpath)
-            elif isinstance(subpath, svgpathtools.QuadraticBezier):
-                new_points, new_largest_x, new_largest_y = quadricbezier_to_points(
-                    subpath
-                )
-            elif isinstance(subpath, svgpathtools.CubicBezier):
-                new_points, new_largest_x, new_largest_y = cubicbezier_to_points(
-                    subpath
-                )
-            else:
-                continue
-
-            if new_largest_x > largest_x:
-                largest_x = new_largest_x
-            if new_largest_y > largest_y:
-                largest_y = new_largest_y
-
-            all_points.extend(make_gcode_points(new_points, raised))
+        Args:
+            new_points: point to create
+            raised: travel to next point raised
+        """
+        for point in new_points:
+            self.points.append(GcodePoint(point, raised))
             raised = False
-            prev_end = subpath.end
 
-    return (all_points, largest_x, largest_y)
+    def _get_points(self, paths: tuple[list[svgpathtools.Path]]):
+        """
+        Gets all points on paths
 
+        Args:
+            paths: paths to get points for
 
-def generate_gcode(svg_path: pathlib.Path) -> tuple[list[str], list[GcodePoint]]:
-    """
-    Converts SVG to gcode
+        Returns:
+            all_points: gcode points found
+        """
+        self.points.clear()
+        new_points: list[complex]
+        prev_end: complex = complex(0, 0)
 
-    Args:
-        svg_path: path to SVG file
-    """
+        raised = False
+        for path in paths:
+            for subpath in path:
+                if prev_end != subpath.start:
+                    raised = True
 
-    parsed = svgpathtools.svg2paths(svg_path)
-    paths: tuple[list[svgpathtools.Path]] = parsed[0]
+                if isinstance(subpath, svgpathtools.Line):
+                    new_points = self._line_to_points(subpath)
+                elif isinstance(subpath, svgpathtools.Arc):
+                    new_points = self._arc_to_points(subpath)
+                elif isinstance(subpath, svgpathtools.QuadraticBezier):
+                    new_points = self._quadricbezier_to_points(subpath)
+                elif isinstance(subpath, svgpathtools.CubicBezier):
+                    new_points = self._cubicbezier_to_points(subpath)
+                else:
+                    continue
 
-    gcode: list[str] = []
-    gcode.extend(HEADER)
-    gcode.extend(START_GCODE)
+                self._extend_gcode_points(new_points, raised)
+                raised = False
+                prev_end = subpath.end
 
-    points, largest_x, largest_y = get_points(paths)
+    def generate_gcode(self, svg_path: pathlib.Path):
+        """
+        Converts SVG to gcode
 
-    scale = get_scale(largest_x, largest_y)
-    for point in points:
-        gcode.extend(point.get_gcode(scale))
+        Args:
+            svg_path: path to SVG file
+        """
+        self.gcode.clear()
 
-    gcode.extend(END_GCODE)
+        parsed = svgpathtools.svg2paths(svg_path)
+        paths: tuple[list[svgpathtools.Path]] = parsed[0]  # type: ignore
+        self._get_points(paths)
 
-    return (gcode, points)
+        self.gcode.extend(HEADER)
+        self.gcode.extend(self.options.start_gcode)
 
+        scale = self._get_scale()
+        for point in self.points:
+            self.gcode.extend(point.get_gcode(scale, self.options))
 
-def save_gcode(path: pathlib.Path, gcode: list[str]):
-    """"""
-    with path.open("w") as f:
-        for line in gcode:
-            f.write(line + "\n")
-    rich.print(f"Created gcode file at [yellow]{path}[/yellow]")
+        self.gcode.extend(self.options.end_gcode)
+
+    def save(self, path: pathlib.Path):
+        """
+        Saves gcode to a file
+
+        Args:
+            path: file path to save gcode to
+        """
+        with path.open("w") as f:
+            for line in self.gcode:
+                print(line)
+                f.write(line + "\n")
+        rich.print(f"Created gcode file at [yellow]{path}[/yellow]")
+
+    def update_options(self, options: SlicingOptions):
+        """"""
+        if isinstance(options, SlicingOptions):
+            self.options = options
 
 
 def main():
@@ -426,6 +363,33 @@ def main():
     Main entry point
     """
     svg_path = pathlib.Path(sys.argv[1])
-    gcode, points = generate_gcode(svg_path)
+
+    options = SlicingOptions(
+        start_point=10 + 10j,
+        max_point=100 + 100j,
+        normal_feedrate=500,
+        travel_feedrate=4000,
+        curve_resolution=50,
+        start_gcode=[
+            "; start",
+            "M107 ; turn fan off",
+            "G21 ; use millimeter",
+            "G90 ; absolute coordinates",
+            "M82 ; absolute E coordinates",
+            "G92 E0 ; set E to 0",
+            "G28 ; home xyz axes",
+            "G1 F500 ; set feedrate",
+            "",
+        ],
+        end_gcode=[
+            "; end",
+            "DISPLAY",
+        ],
+        lift_gcode=["G1 Z10"],
+        unlift_gcode=["G1 Z0"],
+    )
+
+    generator = GcodeGenerator(options)
+    generator.generate_gcode(svg_path)
     gcode_path = pathlib.Path.cwd() / f"{svg_path.stem}.gcode"
-    save_gcode(gcode_path, gcode)
+    generator.save(gcode_path)

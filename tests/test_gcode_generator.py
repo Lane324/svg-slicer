@@ -55,7 +55,7 @@ def test_gcode_point_get_gcode_not_raised(monkeypatch: pytest.MonkeyPatch):
     point = svg2gcode.gcode_generator.GcodePoint(num, False)
     gcode = point.get_gcode(1)
 
-    expected_gcode = [f"G1 X{num.real} Y{num.imag}\n"]
+    expected_gcode = [f"G1 X{num.real} Y{num.imag}"]
 
     assert gcode == expected_gcode
 
@@ -73,11 +73,12 @@ def test_gcode_point_get_gcode_raised(monkeypatch: pytest.MonkeyPatch):
 
     expected_gcode = [
         svg2gcode.gcode_generator.LIFT_GCODE,
-        f"G0 F{svg2gcode.gcode_generator.TRAVEL_FEEDRATE}\n",
-        f"G1 X{num.real} Y{num.imag}\n",
-        f"G0 F{svg2gcode.gcode_generator.NORMAL_FEEDRATE}\n",
+        f"G0 F{svg2gcode.gcode_generator.TRAVEL_FEEDRATE}",
+        f"G1 X{num.real} Y{num.imag}",
+        f"G0 F{svg2gcode.gcode_generator.NORMAL_FEEDRATE}",
         svg2gcode.gcode_generator.UNLIFT_GCODE,
     ]
+
     assert gcode == expected_gcode
 
 

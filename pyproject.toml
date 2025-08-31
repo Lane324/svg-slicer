@@ -14,10 +14,11 @@ dependencies = [
     "rich>=14.1.0",
     "scipy>=1.16.1",
     "svgpathtools>=1.7.1",
+    "tomli-w>=1.2.0",
 ]
 
 [project.scripts]
-svg2gcode = "svg2gcode.gcode_generator:main"
+svg2gcode = "svg2gcode.__main__:main"
 
 [build-system]
 requires = ["uv_build>=0.8.8,<0.9.0"]
@@ -35,3 +36,5 @@ dev = [
 [tool.pytest.ini_options]
 addopts = "--cov=svg2gcode --cov-branch --cov-report xml tests --cov-report term-missing"
 testpaths = ["tests"]
+
+[tool.pylint]
