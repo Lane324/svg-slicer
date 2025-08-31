@@ -9,12 +9,10 @@ from dataclasses import dataclass
 import tomli_w
 
 # pylint: disable=no-name-in-module
-from PySide6.QtCore import QFile, QSaveFile, QTextStream, Slot
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
-    QFileDialog,
     QGroupBox,
     QHBoxLayout,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QStatusBar,
@@ -23,8 +21,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from svg_slicer import helpers
+
 DEFAULT_TOML_PATH = (
-    pathlib.Path().home() / "AppData" / "Roaming" / "svg2gcode" / "svg2gcode.toml"
+    pathlib.Path().home() / "AppData" / "Roaming" / "svg-slicer" / "svg-slicer.toml"
 )
 
 DEFAULT_START_POINT = complex(0, 0)
@@ -48,6 +48,7 @@ DEFAULT_LIFT_GCODE = ["G1 Z10"]
 DEFAULT_UNLIFT_GCODE = ["G1 Z0"]
 
 
+# pylint: disable=too-many-instance-attributes
 @dataclass
 class SlicingOptions:
     """Holds slicing options"""
@@ -63,7 +64,7 @@ class SlicingOptions:
     unlift_gcode: list[str]
 
     def get_dict(self) -> dict:
-        """"""
+        """Turns instance into a TOML serializable dic"""
         return {
             "machine": {
                 "normal_feedrate": self.normal_feedrate,
@@ -85,11 +86,14 @@ class SlicingOptions:
 
 
 class SlicingOptionsWiget(QWidget):
+    """Widget to view and set slicer options"""
+
     def __init__(
         self,
         options: SlicingOptions | None = None,
         options_file: pathlib.Path | None = None,
     ):
+        """Creates SlicingOptionsWiget"""
         super().__init__()
 
         self._create_widgets()
@@ -100,10 +104,10 @@ class SlicingOptionsWiget(QWidget):
         elif options_file:
             self.load_options(options_file)
         else:
-            self.load_default()
+            self._load_default()
 
     def _create_widgets(self):
-
+        """Creates all subwidgets"""
         self.status_bar = QStatusBar()
 
         # Input boxes
@@ -133,13 +137,18 @@ class SlicingOptionsWiget(QWidget):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
 
-        self.load_button = QPushButton("Load")
-        self.load_button.clicked.connect(self._load_options_file)
         self.save_to_file_button = QPushButton("Save to file")
+        self.load_button = QPushButton("Load")
+
+        self._connect_widgets()
+
+    def _connect_widgets(self):
+        """Connects widgets to their slots"""
+        self.load_button.clicked.connect(self._load_options_file)
         self.save_to_file_button.clicked.connect(self._save_options_file)
 
     def _create_layouts(self):
-        """"""
+        """Creates and congiures all layouts in widget"""
         self.main_layout = QVBoxLayout()
 
         # Input layouts
@@ -207,7 +216,16 @@ class SlicingOptionsWiget(QWidget):
 
         self.setLayout(self.main_layout)
 
-    def _read_float(self, text_box: QTextEdit, error_message: str) -> float | None:
+    def _read_float(self, text_box: QTextEdit) -> float | None:
+        """
+        Reads float from text box
+
+        Args:
+            text_box: text box to read text from
+
+        Returns:
+            float conversion of text in text box if it can be converted
+        """
         str_value = text_box.toPlainText()
         try:
             float_value = float(str_value)
@@ -215,7 +233,16 @@ class SlicingOptionsWiget(QWidget):
             return None
         return float_value
 
-    def _read_int(self, text_box: QTextEdit, error_message: str) -> int | None:
+    def _read_int(self, text_box: QTextEdit) -> int | None:
+        """
+        Reads integer from text box
+
+        Args:
+            text_box: text box to read text from
+
+        Returns:
+            int conversion of text in text box if it can be converted
+        """
         str_value = text_box.toPlainText()
         try:
             int_value = int(str_value)
@@ -224,6 +251,7 @@ class SlicingOptionsWiget(QWidget):
         return int_value
 
     def _update_option_text_fields(self):
+        """Update text fields with set options"""
         if not self.options:
             return
         self.start_x_input.setPlainText(str(self.options.start_point.real))
@@ -245,14 +273,8 @@ class SlicingOptionsWiget(QWidget):
 
     @Slot()
     def _load_options_file(self):
-
-        dialog = QFileDialog()
-        dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        dialog.setNameFilter("TOML (*.toml)")
-        dialog.setViewMode(QFileDialog.ViewMode.List)
-        dialog.exec()
-        selected_files = dialog.selectedFiles()
-
+        """File dialog to load options from file"""
+        selected_files = helpers.select_files()
         if not selected_files:
             return
 
@@ -260,84 +282,78 @@ class SlicingOptionsWiget(QWidget):
 
     @Slot()
     def _save_options_file(self):
+        """File dialog to save currently set options to file"""
         if not self.options:
             return
 
-        fileName, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save File",
-            filter="TOML (*.toml)",
-            selectedFilter="TOML (*.toml)",
+        file_name = helpers.save_file(
+            self, tomli_w.dumps(self.options.get_dict()), "TOML (*.toml)"
         )
-        if not fileName:
-            return
 
-        error = None
-        file = QSaveFile(fileName)
-        if file.open(QFile.OpenModeFlag.WriteOnly | QFile.OpenModeFlag.Text):
-            outf = QTextStream(file)
-            _ = outf << tomli_w.dumps(self.options.get_dict())
+        self.status_bar.showMessage(f"Config written to {file_name}")
 
-            if not file.commit():
-                reason = file.errorString()
-                error = f"Cannot write file {fileName}:\n{reason}."
-        else:
-            reason = file.errorString()
-            error = f"Cannot open file {fileName}:\n{reason}."
-
-        if error:
-            QMessageBox.warning(self, "Application", error)
-            return False
-
-        self.status_bar.showMessage(f"Config written to {fileName}")
-
+    # pylint: disable=too-many-locals
     def load_options(self, file: pathlib.Path):
-        """"""
+        """
+        Load slicer options from a file
+
+        Args:
+            file: path to TOML file
+        """
         with file.open("rb") as f:
             data = tomllib.load(f)
 
         point_data: dict[str, int] | None = data.get("point")
-        if point_data:
-            start_point = complex(
-                point_data.get("start_x") or 0, point_data.get("start_y") or 0
-            )
-            max_x = point_data.get("max_x")
-            max_y = point_data.get("max_y")
-            if max_x and max_y:
-                max_point = complex(max_x, max_y)
-            else:
-                max_point = None
+        start_point = (
+            complex(point_data.get("start_x") or 0, point_data.get("start_y") or 0)
+            if point_data
+            else DEFAULT_START_POINT
+        )
+        max_x = point_data.get("max_x") if point_data else None
+        max_y = point_data.get("max_y") if point_data else None
+        if max_x and max_y:
+            max_point = complex(max_x, max_y)
         else:
-            start_point = DEFAULT_START_POINT
-            max_point = DEFAULT_MAX_POINT
+            max_point = None
 
         machine_data: dict[str, int] | None = data.get("machine")
-        if machine_data:
-            normal_feedrate = (
-                machine_data.get("normal_feedrate") or DEFAULT_NORMAL_FEEDRATE
-            )
-            travel_feedrate = (
-                machine_data.get("travel_feedrate") or DEFAULT_TRAVEL_FEEDRATE
-            )
-            curve_resolution = (
-                machine_data.get("curve_resolution") or DEFAULT_CURVE_RESOLUTION
-            )
-        else:
-            normal_feedrate = DEFAULT_NORMAL_FEEDRATE
-            travel_feedrate = DEFAULT_TRAVEL_FEEDRATE
-            curve_resolution = DEFAULT_CURVE_RESOLUTION
+        normal_feedrate = (
+            machine_data.get("normal_feedrate") or DEFAULT_NORMAL_FEEDRATE
+            if machine_data
+            else DEFAULT_NORMAL_FEEDRATE
+        )
+        travel_feedrate = (
+            machine_data.get("travel_feedrate") or DEFAULT_TRAVEL_FEEDRATE
+            if machine_data
+            else DEFAULT_TRAVEL_FEEDRATE
+        )
+        curve_resolution = (
+            machine_data.get("curve_resolution") or DEFAULT_CURVE_RESOLUTION
+            if machine_data
+            else DEFAULT_CURVE_RESOLUTION
+        )
 
         gcode_data: dict[str, list[str]] | None = data.get("gcode")
-        if gcode_data:
-            start_gcode = gcode_data.get("start") or DEFAULT_START_GCODE
-            end_gcode = gcode_data.get("end") or DEFAULT_START_GCODE
-            lift_gcode = gcode_data.get("lift") or DEFAULT_LIFT_GCODE
-            unlift_gcode = gcode_data.get("unlift") or DEFAULT_UNLIFT_GCODE
-        else:
-            start_gcode = DEFAULT_START_GCODE
-            end_gcode = DEFAULT_START_GCODE
-            lift_gcode = DEFAULT_LIFT_GCODE
-            unlift_gcode = DEFAULT_UNLIFT_GCODE
+        start_gcode = (
+            gcode_data.get("start") or DEFAULT_START_GCODE
+            if gcode_data
+            else DEFAULT_START_GCODE
+        )
+        end_gcode = (
+            gcode_data.get("end") or DEFAULT_START_GCODE
+            if gcode_data
+            else DEFAULT_START_GCODE
+        )
+        lift_gcode = (
+            gcode_data.get("lift") or DEFAULT_LIFT_GCODE
+            if gcode_data
+            else DEFAULT_LIFT_GCODE
+        )
+        unlift_gcode = (
+            gcode_data.get("unlift") or DEFAULT_UNLIFT_GCODE
+            if gcode_data
+            else DEFAULT_UNLIFT_GCODE
+        )
 
         if hasattr(self, "options") and isinstance(self.options, SlicingOptions):
             self.options.start_point = start_point
@@ -364,9 +380,10 @@ class SlicingOptionsWiget(QWidget):
             )
 
         self._update_option_text_fields()
-        self.status_bar.showMessage(f"Loaded options {file}")
+        self.status_bar.showMessage(f"Loaded options from: {file}")
 
-    def load_default(self):
+    def _load_default(self):
+        """Loads slicer options from default config file"""
         if not DEFAULT_TOML_PATH.is_file():
             self.status_bar.showMessage(
                 f"Could not find options file at {DEFAULT_TOML_PATH}"
@@ -387,36 +404,23 @@ class SlicingOptionsWiget(QWidget):
         self.load_options(DEFAULT_TOML_PATH)
 
     def update_options(self):
-        """"""
+        """Read from text input and update slicer options"""
         start_point = complex(
-            self._read_float(self.start_x_input, "Starting X point is not a float")
-            or 0.0,
-            self._read_float(self.start_y_input, "Starting Y point is not a float")
-            or 0.0,
+            self._read_float(self.start_x_input) or 0.0,
+            self._read_float(self.start_y_input) or 0.0,
         )
         max_point = complex(
-            self._read_float(self.max_x_input, "Starting X point is not a float")
-            or 0.0,
-            self._read_float(self.max_y_input, "Starting Y point is not a float")
-            or 0.0,
+            self._read_float(self.max_x_input) or 0.0,
+            self._read_float(self.max_y_input) or 0.0,
         )
         normal_feedrate = (
-            self._read_int(
-                self.normal_feedrate_input, "Normal feedrate is not a integer"
-            )
-            or DEFAULT_NORMAL_FEEDRATE
+            self._read_int(self.normal_feedrate_input) or DEFAULT_NORMAL_FEEDRATE
         )
         travel_feedrate = (
-            self._read_int(
-                self.travel_feedrate_input, "Travel feedrate is not a integer"
-            )
-            or DEFAULT_TRAVEL_FEEDRATE
+            self._read_int(self.travel_feedrate_input) or DEFAULT_TRAVEL_FEEDRATE
         )
         curve_resolution = (
-            self._read_int(
-                self.curve_resolution_input, "Curve resolution is not a integer"
-            )
-            or DEFAULT_CURVE_RESOLUTION
+            self._read_int(self.curve_resolution_input) or DEFAULT_CURVE_RESOLUTION
         )
         start_gcode = (
             self.start_gcode_input.toPlainText().splitlines() or DEFAULT_START_GCODE

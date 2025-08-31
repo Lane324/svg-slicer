@@ -7,7 +7,7 @@ import unittest
 import pytest
 import svgpathtools
 
-import svg2gcode.gcode_generator
+import svg_slicer.gcode_generator
 
 
 @pytest.fixture()
@@ -39,20 +39,20 @@ def test_init_gcode_point():
 
     num = 1 + 2j
     raised = True
-    point = svg2gcode.gcode_generator.GcodePoint(num, raised)
+    point = svg - slicer.gcode_generator.GcodePoint(num, raised)
     assert point.point == num
     assert point.raised == raised
 
 
 def test_gcode_point_get_gcode_not_raised(monkeypatch: pytest.MonkeyPatch):
     """Tests that a GcodePoint correctly creates gcode when not raised"""
-    monkeypatch.setattr("svg2gcode.gcode_generator.START_X", 0)
-    monkeypatch.setattr("svg2gcode.gcode_generator.START_Y", 0)
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_X", 10)
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_Y", 10)
+    monkeypatch.setattr("svg_slicer.gcode_generator.START_X", 0)
+    monkeypatch.setattr("svg_slicer.gcode_generator.START_Y", 0)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_X", 10)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_Y", 10)
 
     num = 1 + 2j
-    point = svg2gcode.gcode_generator.GcodePoint(num, False)
+    point = svg - slicer.gcode_generator.GcodePoint(num, False)
     gcode = point.get_gcode(1)
 
     expected_gcode = [f"G1 X{num.real} Y{num.imag}"]
@@ -62,21 +62,21 @@ def test_gcode_point_get_gcode_not_raised(monkeypatch: pytest.MonkeyPatch):
 
 def test_gcode_point_get_gcode_raised(monkeypatch: pytest.MonkeyPatch):
     """Tests that a GcodePoint correctly creates gcode when raised"""
-    monkeypatch.setattr("svg2gcode.gcode_generator.START_X", 0)
-    monkeypatch.setattr("svg2gcode.gcode_generator.START_Y", 0)
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_X", 10)
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_Y", 10)
+    monkeypatch.setattr("svg_slicer.gcode_generator.START_X", 0)
+    monkeypatch.setattr("svg_slicer.gcode_generator.START_Y", 0)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_X", 10)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_Y", 10)
 
     num = 1 + 2j
-    point = svg2gcode.gcode_generator.GcodePoint(num, True)
+    point = svg - slicer.gcode_generator.GcodePoint(num, True)
     gcode = point.get_gcode(1)
 
     expected_gcode = [
-        svg2gcode.gcode_generator.LIFT_GCODE,
-        f"G0 F{svg2gcode.gcode_generator.TRAVEL_FEEDRATE}",
+        svg - slicer.gcode_generator.LIFT_GCODE,
+        f"G0 F{svg_slicer.gcode_generator.TRAVEL_FEEDRATE}",
         f"G1 X{num.real} Y{num.imag}",
-        f"G0 F{svg2gcode.gcode_generator.NORMAL_FEEDRATE}",
-        svg2gcode.gcode_generator.UNLIFT_GCODE,
+        f"G0 F{svg_slicer.gcode_generator.NORMAL_FEEDRATE}",
+        svg - slicer.gcode_generator.UNLIFT_GCODE,
     ]
 
     assert gcode == expected_gcode
@@ -100,7 +100,7 @@ def test_getting_direction_between_points(
     start: complex, end: complex, expected_direction: float
 ):
     """Test that getting the direction between 2 points returns the correct degrees"""
-    assert svg2gcode.gcode_generator.get_direction(start, end) == expected_direction
+    assert svg - slicer.gcode_generator.get_direction(start, end) == expected_direction
 
 
 @pytest.mark.parametrize(
@@ -122,27 +122,27 @@ def test_scale_factors(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Test that getting scale factors for a given x and y coordinate"""
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_X", 10.0)
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_Y", 10.0)
-    assert scale == svg2gcode.gcode_generator.get_scale(x, y)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_X", 10.0)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_Y", 10.0)
+    assert scale == svg - slicer.gcode_generator.get_scale(x, y)
 
 
 def test_scale_factors_no_max_x(monkeypatch: pytest.MonkeyPatch):
     """Test that getting scale factors for a given x and y coordinate"""
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_X", None)
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_Y", 10.0)
-    assert 1.0 == svg2gcode.gcode_generator.get_scale(10.0, 10.0)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_X", None)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_Y", 10.0)
+    assert 1.0 == svg - slicer.gcode_generator.get_scale(10.0, 10.0)
 
 
 def test_scale_factors_no_max_y(monkeypatch: pytest.MonkeyPatch):
     """Test that getting scale factors for a given x and y coordinate"""
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_X", 10.0)
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_Y", None)
-    assert 1.0 == svg2gcode.gcode_generator.get_scale(10.0, 10.0)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_X", 10.0)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_Y", None)
+    assert 1.0 == svg - slicer.gcode_generator.get_scale(10.0, 10.0)
 
 
 def test_scale_factors_no_max_x_or_y(monkeypatch: pytest.MonkeyPatch):
     """Test that getting scale factors for a given x and y coordinate"""
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_X", None)
-    monkeypatch.setattr("svg2gcode.gcode_generator.MAX_Y", None)
-    assert 1.0 == svg2gcode.gcode_generator.get_scale(10.0, 10.0)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_X", None)
+    monkeypatch.setattr("svg_slicer.gcode_generator.MAX_Y", None)
+    assert 1.0 == svg - slicer.gcode_generator.get_scale(10.0, 10.0)

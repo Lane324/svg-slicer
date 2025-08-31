@@ -1,30 +1,27 @@
-"""GUI app for svg2gcode"""
+"""GUI app for svg-slicer"""
 
 import pathlib
 import sys
 
-from PySide6.QtCore import QFile, QSaveFile, QTextStream, Slot
-
 # pylint: disable=no-name-in-module
+from PySide6.QtCore import Slot
 from PySide6.QtSvgWidgets import QGraphicsSvgItem
 from PySide6.QtWidgets import (
     QApplication,
-    QFileDialog,
     QGraphicsScene,
     QGraphicsView,
     QHBoxLayout,
     QLabel,
     QMainWindow,
-    QMessageBox,
     QPushButton,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from svg2gcode import gcode_generator, gcode_viewer
-from svg2gcode.gcode_generator import GcodeGenerator
-from svg2gcode.slicing_options import SlicingOptionsWiget
+from svg_slicer import gcode_generator, gcode_viewer, helpers
+from svg_slicer.gcode_generator import GcodeGenerator
+from svg_slicer.slicing_options import SlicingOptionsWiget
 
 
 class MainWindow(QMainWindow):
@@ -37,20 +34,31 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("Gcode Generator")
-        self.create_menu()
-        self.setUnifiedTitleAndToolBarOnMac(True)
+
+        self._create_menu()
+        self._create_widgets()
+        self._create_layouts()
 
         self.selected_svg: pathlib.Path | None = None
 
-        self.slicing_options_widget = SlicingOptionsWiget()
         self.gcode_generator: GcodeGenerator = GcodeGenerator(
             self.slicing_options_widget.options
         )
         self.points: list[gcode_generator.GcodePoint] | None = None
 
-        # Widgets
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
+    def _create_menu(self):
+        """Creates menu"""
+        self._file_menu = self.menuBar().addMenu("&File")
+        self._file_menu.addAction("Open SVG", self.select_svg)
+        self._file_menu.addAction("Generate Gcode", self.generate_gcode)
+        self._file_menu.addAction("Save Gcode", self.save_file)
+        self._file_menu.addSeparator()
+        self._file_menu.addAction("Exit", self.close)
+
+    def _create_widgets(self):
+        """Creates all subwidgets"""
+        self.main_widget = QWidget()
+        self.setCentralWidget(self.main_widget)
 
         self.select_file_button = QPushButton("Open SVG")
         self.selected_file_label = QLabel()
@@ -60,24 +68,28 @@ class MainWindow(QMainWindow):
         self.svg_scene = QGraphicsScene()
         self.svg_viewer = QGraphicsView(self.svg_scene)
 
-        self.gcode_viewer = gcode_viewer.GcodeViewer()
+        self.gcode_viewer = gcode_viewer.GcodeViewerWidget()
+
+        self.slicing_options_widget = SlicingOptionsWiget()
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self.svg_viewer, "SVG")
         self.tabs.addTab(self.gcode_viewer, "Gcode")
         self.tabs.addTab(self.slicing_options_widget, "Options")
 
-        # Connections
+        self._connect_widgets()
+
+    def _connect_widgets(self):
+        """Connects widgets to their slots"""
         self.select_file_button.clicked.connect(self.select_svg)
         self.generate_gcode_button.clicked.connect(self.generate_gcode)
         self.save_file_button.clicked.connect(self.save_file)
 
-        # Layouts
+    def _create_layouts(self):
+        """Creates and congiures all layouts in widget"""
         main_layout = QVBoxLayout()
         file_selection_layout = QHBoxLayout()
         file_generation_layout = QHBoxLayout()
-
-        # Add widgets to layouts
         file_selection_layout.addWidget(self.select_file_button)
         file_selection_layout.addWidget(self.selected_file_label)
         file_generation_layout.addWidget(self.generate_gcode_button)
@@ -87,17 +99,12 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(file_generation_layout)
         self.setLayout(main_layout)
 
-        main_widget.setLayout(main_layout)
+        self.main_widget.setLayout(main_layout)
 
     @Slot()
     def select_svg(self):
-        dialog = QFileDialog()
-        dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
-        dialog.setNameFilter("SVG (*.svg)")
-        dialog.setViewMode(QFileDialog.ViewMode.List)
-        dialog.exec()
-        selected_files = dialog.selectedFiles()
-
+        """File dialog to select SVG file to slice"""
+        selected_files = helpers.select_files()
         if not selected_files:
             return
 
@@ -109,6 +116,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def generate_gcode(self):
+        """Slices selected SVG or prompts to select SVG"""
         if not self.selected_svg:
             self.select_svg()
         if not self.selected_svg:
@@ -116,56 +124,26 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage("Gcode generation started...")
         self.slicing_options_widget.update_options()
-        self.gcode_generator.update_options(self.slicing_options_widget.options)
+        self.gcode_generator.set_options(self.slicing_options_widget.options)
         self.gcode_generator.generate_gcode(self.selected_svg)
         self.statusBar().showMessage("Gcode generated!", 2000)
         self.gcode_viewer.load_gcode(self.gcode_generator.gcode)
 
     @Slot()
     def save_file(self):
+        """File dialog to save gcode file"""
         if not self.gcode_generator.gcode:
             return
 
-        fileName, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save File",
-            filter="Gcode Files (*.gcode)",
-            selectedFilter="Gcode Files (*.gcode)",
+        file_name = helpers.save_file(
+            self, "\n".join(self.gcode_generator.gcode), "Gcode Files (*.gcode)"
         )
-        if not fileName:
-            return
 
-        error = None
-        file = QSaveFile(fileName)
-        if file.open(QFile.OpenModeFlag.WriteOnly | QFile.OpenModeFlag.Text):
-            outf = QTextStream(file)
-            string = "\n".join(self.gcode_generator.gcode)
-            _ = outf << string
-
-            if not file.commit():
-                reason = file.errorString()
-                error = f"Cannot write file {fileName}:\n{reason}."
-        else:
-            reason = file.errorString()
-            error = f"Cannot open file {fileName}:\n{reason}."
-
-        if error:
-            QMessageBox.warning(self, "Application", error)
-            return False
-
-        self.statusBar().showMessage(f"Gcode written to {fileName}")
-
-    def create_menu(self):
-        self._file_menu = self.menuBar().addMenu("&File")
-        self._file_menu.addAction("Open SVG", self.select_svg)
-        self._file_menu.addAction("Generate Gcode", self.generate_gcode)
-        self._file_menu.addAction("Save Gcode", self.save_file)
-        self._file_menu.addSeparator()
-        self._file_menu.addAction("Exit", self.close)
+        self.statusBar().showMessage(f"Gcode written to {file_name}")
 
 
 def main():
-    """Main entry point for svg2gcode"""
+    """Main entry point for svg-slicer"""
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     window = MainWindow()

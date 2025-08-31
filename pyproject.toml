@@ -1,11 +1,9 @@
 [project]
-name = "svg2gcode"
+name = "svg-slicer"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-authors = [
-    { name = "Lane324", email = "lanetaylor2013@gmail.com" }
-]
+authors = [{ name = "Lane324", email = "lanetaylor2013@gmail.com" }]
 requires-python = ">=3.13"
 dependencies = [
     "matplotlib>=3.10.6",
@@ -18,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-svg2gcode = "svg2gcode.__main__:main"
+svg-slicer = "svg_slicer.__main__:main"
 
 [build-system]
 requires = ["uv_build>=0.8.8,<0.9.0"]
@@ -34,7 +32,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "--cov=svg2gcode --cov-branch --cov-report xml tests --cov-report term-missing"
+addopts = "--cov=svg_slicer --cov-branch --cov-report xml tests --cov-report term-missing"
 testpaths = ["tests"]
 
 [tool.pylint]

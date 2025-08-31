@@ -27,12 +27,13 @@ HOME_VIEW = (45, 180 + 45)
 TOP_DOWN_VIEW = (90, 270)
 
 
-class GcodeViewer(QWidget):
+class GcodeViewerWidget(QWidget):
     """Widget to view gcode files"""
 
     # pylint: disable=too-many-instance-attributes
 
     def __init__(self):
+        """Creates GcodeViewer"""
         super().__init__()
         self.gcode_file: pathlib.Path | None = None
         self.coordinate_points: tuple[list[float], list[float], list[float]] = (

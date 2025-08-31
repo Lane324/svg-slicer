@@ -725,7 +725,7 @@ wheels = [
 ]
 
 [[package]]
-name = "svg2gcode"
+name = "svg-slicer"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

@@ -5,7 +5,6 @@ Turns a SVG into gcode
 import datetime
 import math
 import pathlib
-import sys
 from typing import cast
 
 import numpy as np
@@ -13,7 +12,7 @@ import rich
 import scipy.optimize
 import svgpathtools
 
-from svg2gcode.slicing_options import SlicingOptions
+from svg_slicer.slicing_options import SlicingOptions
 
 HEADER = [
     f"; Generated with SVG gcode generator at {datetime.datetime.now().timestamp()}",
@@ -352,44 +351,12 @@ class GcodeGenerator:
                 f.write(line + "\n")
         rich.print(f"Created gcode file at [yellow]{path}[/yellow]")
 
-    def update_options(self, options: SlicingOptions):
-        """"""
+    def set_options(self, options: SlicingOptions):
+        """
+        Setter for options attribute
+
+        Args:
+            options: options to set
+        """
         if isinstance(options, SlicingOptions):
             self.options = options
-
-
-def main():
-    """
-    Main entry point
-    """
-    svg_path = pathlib.Path(sys.argv[1])
-
-    options = SlicingOptions(
-        start_point=10 + 10j,
-        max_point=100 + 100j,
-        normal_feedrate=500,
-        travel_feedrate=4000,
-        curve_resolution=50,
-        start_gcode=[
-            "; start",
-            "M107 ; turn fan off",
-            "G21 ; use millimeter",
-            "G90 ; absolute coordinates",
-            "M82 ; absolute E coordinates",
-            "G92 E0 ; set E to 0",
-            "G28 ; home xyz axes",
-            "G1 F500 ; set feedrate",
-            "",
-        ],
-        end_gcode=[
-            "; end",
-            "DISPLAY",
-        ],
-        lift_gcode=["G1 Z10"],
-        unlift_gcode=["G1 Z0"],
-    )
-
-    generator = GcodeGenerator(options)
-    generator.generate_gcode(svg_path)
-    gcode_path = pathlib.Path.cwd() / f"{svg_path.stem}.gcode"
-    generator.save(gcode_path)
