@@ -274,7 +274,7 @@ class SlicingOptionsWiget(QWidget):
     @Slot()
     def _load_options_file(self):
         """File dialog to load options from file"""
-        selected_files = helpers.select_files()
+        selected_files = helpers.select_files("TOML (*.toml)")
         if not selected_files:
             return
 

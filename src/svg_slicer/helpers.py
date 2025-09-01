@@ -46,7 +46,7 @@ def save_file(widget: QWidget, file_contents: str, file_filter: str) -> str | No
     return file_name
 
 
-def select_files() -> list[str]:
+def select_files(file_filter: str) -> list[str]:
     """
     File dialog to select files
 
@@ -55,7 +55,7 @@ def select_files() -> list[str]:
     """
     dialog = QFileDialog()
     dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
-    dialog.setNameFilter("TOML (*.toml)")
+    dialog.setNameFilter(file_filter)
     dialog.setViewMode(QFileDialog.ViewMode.List)
     dialog.exec()
     return dialog.selectedFiles()

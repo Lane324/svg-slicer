@@ -2,39 +2,30 @@
 Turns a SVG into gcode
 """
 
-import datetime
 import math
 import pathlib
-from typing import cast
+from dataclasses import dataclass
+from typing import Iterable, cast
 
 import numpy as np
-import rich
 import scipy.optimize
 import svgpathtools
 
 from svg_slicer.slicing_options import SlicingOptions
 
 HEADER = [
-    f"; Generated with SVG gcode generator at {datetime.datetime.now().timestamp()}",
+    "; Generated with svg-slicer",
     "",
     "",
 ]
 
 
-# pylint: disable=too-few-public-methods
+@dataclass
 class GcodePoint:
     """Holds data about a point in gcode"""
 
-    def __init__(self, point: complex, raised: bool):
-        """
-        Creates a GcodePoint
-
-        Args:
-            point: XY coordinate
-            raised: if the Z axis is raised
-        """
-        self.point: complex = point
-        self.raised: bool = raised
+    point: complex
+    raised: bool
 
     def get_gcode(self, scale: float, options: SlicingOptions) -> list[str]:
         """
@@ -48,6 +39,12 @@ class GcodePoint:
         """
         corrected_x = self.point.real * scale + options.start_point.real
         corrected_y = self.point.imag * scale + options.start_point.imag
+
+        if corrected_x % 1 == 0:
+            corrected_x = int(corrected_x)
+        if corrected_y % 1 == 0:
+            corrected_y = int(corrected_y)
+
         if self.raised:
             gcode = [
                 *options.lift_gcode,
@@ -114,7 +111,7 @@ class GcodeGenerator:
                 return 180 + degrees  # quadrant 3
             return 270 - degrees  # quadrant 4
 
-        return 0.0
+        return 0.0  # pragma no cover
 
     def _get_scale(self) -> float:
         """
@@ -128,9 +125,6 @@ class GcodeGenerator:
             The smallest of the X or Y scale factor
         """
 
-        if not self.largest_x and not self.largest_y:
-            return 1.0
-
         x_scale: float = 1.0
         y_scale: float = 1.0
 
@@ -140,7 +134,7 @@ class GcodeGenerator:
 
         return min(x_scale, y_scale)
 
-    def _line_to_points(self, line: svgpathtools.Line) -> list[complex]:
+    def _line_to_points(self, line: svgpathtools.Line) -> tuple[complex]:
         """
         Converts a line to points
 
@@ -151,10 +145,10 @@ class GcodeGenerator:
             points calculated
         """
 
-        self.largest_x = max(self.largest_x, line.start.real)
-        self.largest_y = max(self.largest_y, line.start.imag)
+        self.largest_x = max(self.largest_x, line.start.real, line.end.real)
+        self.largest_y = max(self.largest_y, line.start.imag, line.end.imag)
 
-        return [line.start, line.end]
+        return (line.start, line.end)
 
     def _arc_to_points(self, arc: svgpathtools.Arc) -> list[complex]:
         """
@@ -166,7 +160,6 @@ class GcodeGenerator:
         Returns:
             points calculated
         """
-
         exp_phi = np.exp(1j * np.radians(arc.rotation))
 
         def ellipse_system(variables):
@@ -269,7 +262,7 @@ class GcodeGenerator:
 
         return points
 
-    def _extend_gcode_points(self, new_points: list[complex], raised: bool):
+    def _extend_gcode_points(self, new_points: Iterable[complex], raised: bool):
         """
         Extends self.points from complex numbers
 
@@ -278,10 +271,10 @@ class GcodeGenerator:
             raised: travel to next point raised
         """
         for point in new_points:
-            self.points.append(GcodePoint(point, raised))
+            self.points.append(GcodePoint(point=point, raised=raised))
             raised = False
 
-    def _get_points(self, paths: tuple[list[svgpathtools.Path]]):
+    def _get_points(self, paths: tuple[list[svgpathtools.Path], ...]):
         """
         Gets all points on paths
 
@@ -292,7 +285,7 @@ class GcodeGenerator:
             all_points: gcode points found
         """
         self.points.clear()
-        new_points: list[complex]
+        new_points: Iterable[complex]
         prev_end: complex = complex(0, 0)
 
         raised = False
@@ -337,26 +330,3 @@ class GcodeGenerator:
             self.gcode.extend(point.get_gcode(scale, self.options))
 
         self.gcode.extend(self.options.end_gcode)
-
-    def save(self, path: pathlib.Path):
-        """
-        Saves gcode to a file
-
-        Args:
-            path: file path to save gcode to
-        """
-        with path.open("w") as f:
-            for line in self.gcode:
-                print(line)
-                f.write(line + "\n")
-        rich.print(f"Created gcode file at [yellow]{path}[/yellow]")
-
-    def set_options(self, options: SlicingOptions):
-        """
-        Setter for options attribute
-
-        Args:
-            options: options to set
-        """
-        if isinstance(options, SlicingOptions):
-            self.options = options

@@ -104,7 +104,7 @@ class MainWindow(QMainWindow):
     @Slot()
     def select_svg(self):
         """File dialog to select SVG file to slice"""
-        selected_files = helpers.select_files()
+        selected_files = helpers.select_files("SVG (*.svg)")
         if not selected_files:
             return
 
@@ -124,7 +124,7 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage("Gcode generation started...")
         self.slicing_options_widget.update_options()
-        self.gcode_generator.set_options(self.slicing_options_widget.options)
+        self.gcode_generator.options = self.slicing_options_widget.options
         self.gcode_generator.generate_gcode(self.selected_svg)
         self.statusBar().showMessage("Gcode generated!", 2000)
         self.gcode_viewer.load_gcode(self.gcode_generator.gcode)
