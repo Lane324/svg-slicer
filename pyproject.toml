@@ -1,10 +1,10 @@
 [project]
 name = "svg-slicer"
 version = "0.1.0"
-description = "Add your description here"
+description = "Application to turn SVG files into gcode"
 readme = "README.md"
 authors = [{ name = "Lane324", email = "lanetaylor2013@gmail.com" }]
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
     "matplotlib>=3.10.6",
     "numpy>=2.3.2",
@@ -29,9 +29,18 @@ dev = [
     "pylint>=3.3.8",
     "pytest>=8.4.1",
     "pytest-qt>=4.5.0",
+    "pyside6-stubs>=6.7.3.0",
 ]
 
 [tool.pytest.ini_options]
 addopts = "--cov=svg_slicer --cov-branch --cov-report xml tests --cov-report term-missing"
 testpaths = ["tests"]
 qt_api = "pyside6"
+
+[tool.pylint.main]
+extension-pkg-allow-list = "PySide6"
+py-version = "3.11"
+load-plugins = "pylint.extensions.docparams, pylint.extensions.broad_try_clause"
+
+[tool.pylint.reports]
+output-format = "colorized"

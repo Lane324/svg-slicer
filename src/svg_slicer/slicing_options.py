@@ -7,8 +7,6 @@ import tomllib
 from dataclasses import dataclass
 
 import tomli_w
-
-# pylint: disable=no-name-in-module
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
     QGroupBox,
@@ -27,7 +25,7 @@ DEFAULT_TOML_PATH = (
     pathlib.Path().home() / "AppData" / "Roaming" / "svg-slicer" / "svg-slicer.toml"
 )
 
-DEFAULT_START_POINT = complex(0, 0)
+DEFAULT_START_POINT = complex(1, 1)
 DEFAULT_MAX_POINT = None
 DEFAULT_NORMAL_FEEDRATE = 500
 DEFAULT_TRAVEL_FEEDRATE = 4000
@@ -69,6 +67,7 @@ class SlicingOptions:
             "machine": {
                 "normal_feedrate": self.normal_feedrate,
                 "travel_feedrate": self.travel_feedrate,
+                "curve_resolution": self.curve_resolution,
             },
             "gcode": {
                 "start": self.start_gcode,
@@ -97,10 +96,12 @@ class SlicingOptionsWiget(QWidget):
         super().__init__()
 
         self._create_widgets()
+        self._connect_widgets()
         self._create_layouts()
 
+        self.options: SlicingOptions
         if options:
-            self.options: SlicingOptions = options
+            self.options = options
         elif options_file:
             self.load_options(options_file)
         else:
@@ -139,8 +140,6 @@ class SlicingOptionsWiget(QWidget):
 
         self.save_to_file_button = QPushButton("Save to file")
         self.load_button = QPushButton("Load")
-
-        self._connect_widgets()
 
     def _connect_widgets(self):
         """Connects widgets to their slots"""
@@ -252,8 +251,6 @@ class SlicingOptionsWiget(QWidget):
 
     def _update_option_text_fields(self):
         """Update text fields with set options"""
-        if not self.options:
-            return
         self.start_x_input.setPlainText(str(self.options.start_point.real))
         self.start_y_input.setPlainText(str(self.options.start_point.imag))
 
@@ -283,9 +280,6 @@ class SlicingOptionsWiget(QWidget):
     @Slot()
     def _save_options_file(self):
         """File dialog to save currently set options to file"""
-        if not self.options:
-            return
-
         file_name = helpers.save_file(
             self, tomli_w.dumps(self.options.get_dict()), "TOML (*.toml)"
         )
@@ -433,26 +427,13 @@ class SlicingOptionsWiget(QWidget):
             self.unlift_gcode_input.toPlainText().splitlines() or DEFAULT_UNLIFT_GCODE
         )
 
-        if hasattr(self, "options") and isinstance(self.options, SlicingOptions):
-            self.options.start_point = start_point
-            self.options.max_point = max_point
-            self.options.normal_feedrate = normal_feedrate
-            self.options.travel_feedrate = travel_feedrate
-            self.options.curve_resolution = curve_resolution
-            self.options.start_gcode = start_gcode
-            self.options.end_gcode = end_gcode
-            self.options.lift_gcode = lift_gcode
-            self.options.unlift_gcode = unlift_gcode
-            self.options.max_point = max_point
-        else:
-            self.options = SlicingOptions(
-                start_point=start_point,
-                max_point=max_point,
-                normal_feedrate=normal_feedrate,
-                travel_feedrate=travel_feedrate,
-                curve_resolution=curve_resolution,
-                start_gcode=start_gcode,
-                end_gcode=end_gcode,
-                lift_gcode=lift_gcode,
-                unlift_gcode=unlift_gcode,
-            )
+        self.options.start_point = start_point
+        self.options.max_point = max_point
+        self.options.normal_feedrate = normal_feedrate
+        self.options.travel_feedrate = travel_feedrate
+        self.options.curve_resolution = curve_resolution
+        self.options.start_gcode = start_gcode
+        self.options.end_gcode = end_gcode
+        self.options.lift_gcode = lift_gcode
+        self.options.unlift_gcode = unlift_gcode
+        self.options.max_point = max_point

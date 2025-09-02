@@ -3,7 +3,6 @@
 import pathlib
 import sys
 
-# pylint: disable=no-name-in-module
 from PySide6.QtCore import Slot
 from PySide6.QtSvgWidgets import QGraphicsSvgItem
 from PySide6.QtWidgets import (

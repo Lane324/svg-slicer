@@ -1,6 +1,5 @@
 """Helper functions for svg_slicer"""
 
-# pylint: disable=no-name-in-module
 from PySide6.QtCore import QFile, QSaveFile, QTextStream
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QWidget
 

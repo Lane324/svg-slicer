@@ -1,6 +1,5 @@
 # Python-generated files
 __pycache__/
-.pytest_cache/
 .python-version
 *.py[oc]
 build/

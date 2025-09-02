@@ -10,28 +10,17 @@ import svgpathtools
 
 from svg_slicer import gcode_generator, slicing_options
 
+# pylint: disable=redefined-outer-name, protected-access
+
 
 # region Mocks
-@pytest.fixture()
-def mock_slicing_options() -> slicing_options.SlicingOptions:
-    return slicing_options.SlicingOptions(
-        start_point=complex(0, 0),
-        max_point=complex(10, 10),
-        normal_feedrate=500,
-        travel_feedrate=1000,
-        curve_resolution=10,
-        start_gcode=["; start"],
-        end_gcode=["; end"],
-        lift_gcode=["G1 Z10"],
-        unlift_gcode=["G1 Z0"],
-    )
 
 
 @pytest.fixture()
 def mock_generator(
     mock_slicing_options: slicing_options.SlicingOptions,
 ) -> gcode_generator.GcodeGenerator:
-    """"""
+    """Fixture for gcode generator"""
     return gcode_generator.GcodeGenerator(mock_slicing_options)
 
 

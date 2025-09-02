@@ -8,8 +8,6 @@ from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d import axis3d
-
-# pylint: disable=no-name-in-module
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
     QGroupBox,

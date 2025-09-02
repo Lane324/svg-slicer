@@ -20,6 +20,7 @@ HEADER = [
 ]
 
 
+# pylint: disable=too-few-public-methods
 @dataclass
 class GcodePoint:
     """Holds data about a point in gcode"""
@@ -33,6 +34,7 @@ class GcodePoint:
 
         Args:
             scale: scale factor to apply to coordinates
+            options: slicer options for generating gcode
 
         Returns:
             gcode commands
@@ -134,7 +136,7 @@ class GcodeGenerator:
 
         return min(x_scale, y_scale)
 
-    def _line_to_points(self, line: svgpathtools.Line) -> tuple[complex]:
+    def _line_to_points(self, line: svgpathtools.Line) -> Iterable[complex]:
         """
         Converts a line to points
 
@@ -319,7 +321,7 @@ class GcodeGenerator:
         self.gcode.clear()
 
         parsed = svgpathtools.svg2paths(svg_path)
-        paths: tuple[list[svgpathtools.Path]] = parsed[0]  # type: ignore
+        paths: tuple[list[svgpathtools.Path]] = parsed[0]
         self._get_points(paths)
 
         self.gcode.extend(HEADER)
