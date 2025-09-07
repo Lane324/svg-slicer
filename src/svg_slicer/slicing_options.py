@@ -33,7 +33,6 @@ DEFAULT_TOML_PATH = (
 )
 
 DEFAULT_START_POINT: complex = complex(1, 1)
-DEFAULT_MAX_POINT: complex | None = None
 DEFAULT_NORMAL_FEEDRATE: int = 500
 DEFAULT_TRAVEL_FEEDRATE: int = 4000
 DEFAULT_CURVE_RESOLUTION: int = 20
@@ -60,7 +59,6 @@ class SlicingOptions:
     """Holds slicing options"""
 
     start_point: complex = DEFAULT_START_POINT
-    max_point: complex | None = DEFAULT_MAX_POINT
     normal_feedrate: int = DEFAULT_NORMAL_FEEDRATE
     travel_feedrate: int = DEFAULT_TRAVEL_FEEDRATE
     curve_resolution: int = DEFAULT_CURVE_RESOLUTION
@@ -87,8 +85,6 @@ class SlicingOptions:
             "point": {
                 "start_x": self.start_point.real,
                 "start_y": self.start_point.imag,
-                "max_x": self.max_point.real if self.max_point else None,
-                "max_y": self.max_point.imag if self.max_point else None,
             },
         }
 
@@ -130,13 +126,6 @@ class SlicingOptionsWiget(QWidget):
                 LabeledSpinBoxConfig(label="Y", suffix=" mm"),
             ),
         )
-        self.max_point_selector = MultiLabeledSpinBox(
-            title="Max Point",
-            configs=(
-                LabeledSpinBoxConfig(label="X", suffix=" mm", maximum=10000),
-                LabeledSpinBoxConfig(label="Y", suffix=" mm", maximum=10000),
-            ),
-        )
         self.feedrate_selector = MultiLabeledSpinBox(
             title="Feedrates",
             configs=(
@@ -176,12 +165,6 @@ class SlicingOptionsWiget(QWidget):
         self.start_point_selector.spinboxes[1].spinbox.valueChanged.connect(
             self._start_y_changed
         )
-        self.max_point_selector.spinboxes[0].spinbox.valueChanged.connect(
-            self._max_x_changed
-        )
-        self.max_point_selector.spinboxes[1].spinbox.valueChanged.connect(
-            self._max_y_changed
-        )
         self.feedrate_selector.spinboxes[0].spinbox.valueChanged.connect(
             self._normal_feedrate_changed
         )
@@ -218,7 +201,6 @@ class SlicingOptionsWiget(QWidget):
         self.point_feedrate_layout.addWidget(self.curve_resolution_group)
 
         self.point_feedrate_layout.addWidget(self.start_point_selector)
-        self.point_feedrate_layout.addWidget(self.max_point_selector)
         self.point_feedrate_layout.addWidget(self.feedrate_selector)
         self.curve_resolution_group
         self.point_feedrate_layout.addWidget(self.curve_resolution_group)
@@ -269,14 +251,6 @@ class SlicingOptionsWiget(QWidget):
             int(self.options.start_point.imag)
         )
 
-        if isinstance(self.options.max_point, complex):
-            self.max_point_selector.spinboxes[0].spinbox.setValue(
-                int(self.options.max_point.real)
-            )
-            self.max_point_selector.spinboxes[1].spinbox.setValue(
-                int(self.options.max_point.imag)
-            )
-
         self.feedrate_selector.spinboxes[0].spinbox.setValue(
             self.options.normal_feedrate
         )
@@ -317,24 +291,6 @@ class SlicingOptionsWiget(QWidget):
     @Slot()
     def _start_y_changed(self, new_value: int):
         self.options.start_point = complex(self.options.start_point.imag, new_value)
-
-    @Slot()
-    def _max_x_changed(self, new_value: int):
-        if self.options.max_point:
-            self.options.max_point = complex(new_value, self.options.max_point.imag)
-        else:
-            self.options.max_point = complex(
-                new_value, self.max_point_selector.spinboxes[1].spinbox.value()
-            )
-
-    @Slot()
-    def _max_y_changed(self, new_value: int):
-        if self.options.max_point:
-            self.options.max_point = complex(self.options.max_point.imag, new_value)
-        else:
-            self.options.max_point = complex(
-                self.max_point_selector.spinboxes[0].spinbox.value(), new_value
-            )
 
     @Slot()
     def _normal_feedrate_changed(self, new_value: int):
@@ -384,13 +340,6 @@ class SlicingOptionsWiget(QWidget):
                 point_data.get("start_x") or DEFAULT_START_POINT.real,
                 point_data.get("start_y") or DEFAULT_START_POINT.imag,
             )
-
-            max_x = point_data.get("max_x") if point_data else None
-            max_y = point_data.get("max_y") if point_data else None
-            if max_x and max_y:
-                self.options.max_point = complex(max_x, max_y)
-            else:
-                self.options.max_point = None
 
         if machine_data := data.get("machine"):
             self.options.normal_feedrate = (

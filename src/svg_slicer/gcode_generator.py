@@ -28,7 +28,7 @@ class GcodePoint:
     point: complex
     raised: bool
 
-    def get_gcode(self, scale: float, options: SlicingOptions) -> list[str]:
+    def get_gcode(self, options: SlicingOptions) -> list[str]:
         """
         Turns GcodePoint into gcode commands
 
@@ -39,8 +39,8 @@ class GcodePoint:
         Returns:
             gcode commands
         """
-        corrected_x = self.point.real * scale + options.start_point.real
-        corrected_y = self.point.imag * scale + options.start_point.imag
+        corrected_x = self.point.real + options.start_point.real
+        corrected_y = self.point.imag + options.start_point.imag
 
         if corrected_x % 1 == 0:
             corrected_x = int(corrected_x)
@@ -135,31 +135,6 @@ class GcodeGenerator:
             return 270 - degrees  # quadrant 4
 
         return 0.0  # pragma no cover
-
-    def _get_scale(self) -> float:
-        """
-        Gets scale factor to resize SVG to fit within max x and y
-
-        Args:
-            x: x value
-            y: y value
-
-        Returns:
-            The smallest of the X or Y scale factor
-        """
-
-        x_scale: float = 1.0
-        y_scale: float = 1.0
-
-        if self.options.max_point:
-            if (
-                self.largest_x > self.options.max_point.real
-                or self.largest_y > self.options.max_point.imag
-            ):
-                x_scale = self.options.max_point.real / self.largest_x
-                y_scale = self.options.max_point.imag / self.largest_y
-
-        return min(x_scale, y_scale)
 
     def _line_to_points(self, line: svgpathtools.Line) -> tuple[complex, complex]:
         """
@@ -350,10 +325,7 @@ class GcodeGenerator:
 
         self.gcode.extend(HEADER)
         self.gcode.extend(self.options.start_gcode)
-
-        scale = self._get_scale()
-        print(f"{scale=}")
         for point in self.points:
-            self.gcode.extend(point.get_gcode(scale, self.options))
+            self.gcode.extend(point.get_gcode(self.options))
 
         self.gcode.extend(self.options.end_gcode)
