@@ -267,70 +267,6 @@ def test_gcode_generator_connects_buttons_to_slots(
 
 
 # endregion
-# region SlicingOptionsWiget._read_float
-
-
-def test_reading_float_from_text_box_returns_float(
-    mock_slicing_options: slicing_options.SlicingOptions, qtbot: QtBot
-):
-    """Tests that converting textbox content into a float returns a float"""
-    text_box = QTextEdit()
-    widget = slicing_options.SlicingOptionsWiget(options=mock_slicing_options)
-    qtbot.addWidget(widget)
-    qtbot.addWidget(text_box)
-
-    text_box.setText("1.0")
-
-    assert widget._read_float(text_box) == 1.0
-
-
-def test_reading_not_float_from_text_box_returns_none(
-    mock_slicing_options: slicing_options.SlicingOptions, qtbot: QtBot
-):
-    """Tests that converting textbox content into a float returns a None"""
-    text_box = QTextEdit()
-    widget = slicing_options.SlicingOptionsWiget(options=mock_slicing_options)
-    qtbot.addWidget(widget)
-    qtbot.addWidget(text_box)
-
-    text_box.setText("some text that is not a float")
-
-    assert widget._read_float(text_box) is None
-
-
-# endregion
-# region SlicingOptionsWiget._read_int
-
-
-def test_reading_int_from_text_box_returns_int(
-    mock_slicing_options: slicing_options.SlicingOptions, qtbot: QtBot
-):
-    """Tests that converting textbox content into a int returns a int"""
-    text_box = QTextEdit()
-    widget = slicing_options.SlicingOptionsWiget(options=mock_slicing_options)
-    qtbot.addWidget(widget)
-    qtbot.addWidget(text_box)
-
-    text_box.setText("1")
-
-    assert widget._read_int(text_box) == 1
-
-
-def test_reading_not_int_from_text_box_returns_none(
-    mock_slicing_options: slicing_options.SlicingOptions, qtbot: QtBot
-):
-    """Tests that converting textbox content into a int returns a None"""
-    text_box = QTextEdit()
-    widget = slicing_options.SlicingOptionsWiget(options=mock_slicing_options)
-    qtbot.addWidget(widget)
-    qtbot.addWidget(text_box)
-
-    text_box.setPlainText("some text that is not a int")
-
-    assert widget._read_int(text_box) is None
-
-
-# endregion
 # region SlicingOptionsWiget._update_option_text_fields
 
 
@@ -349,10 +285,10 @@ def test_changing_text_boxes_updates_options(
     new_normal_feedrate = mock_slicing_options.normal_feedrate + 1
     new_travel_feedrate = mock_slicing_options.travel_feedrate + 1
     new_curve_resolution = mock_slicing_options.curve_resolution + 1
-    new_start_gcode = mock_slicing_options.start_gcode + ["new start"]
-    new_end_gcode = mock_slicing_options.end_gcode + ["new end"]
-    new_lift_gcode = mock_slicing_options.lift_gcode + ["new lift"]
-    new_unlift_gcode = mock_slicing_options.unlift_gcode + ["new unlift"]
+    new_start_gcode = list(mock_slicing_options.start_gcode) + ["new start"]
+    new_end_gcode = list(mock_slicing_options.end_gcode) + ["new end"]
+    new_lift_gcode = list(mock_slicing_options.lift_gcode) + ["new lift"]
+    new_unlift_gcode = list(mock_slicing_options.unlift_gcode) + ["new unlift"]
 
     new_options = slicing_options.SlicingOptions(
         start_point=new_start_point,
@@ -368,13 +304,25 @@ def test_changing_text_boxes_updates_options(
     widget.options = new_options
     widget._update_option_text_fields()
 
-    assert widget.start_x_input.toPlainText() == str(new_start_point.real)
-    assert widget.start_y_input.toPlainText() == str(new_start_point.imag)
-    assert widget.max_x_input.toPlainText() == str(new_max_point.real)
-    assert widget.max_y_input.toPlainText() == str(new_max_point.imag)
-    assert widget.normal_feedrate_input.toPlainText() == str(new_normal_feedrate)
-    assert widget.travel_feedrate_input.toPlainText() == str(new_travel_feedrate)
-    assert widget.curve_resolution_input.toPlainText() == str(new_curve_resolution)
+    assert widget.start_point_selector.spinboxes[0].spinbox.value() == int(
+        new_start_point.real
+    )
+    assert widget.start_point_selector.spinboxes[0].spinbox.value() == int(
+        new_start_point.imag
+    )
+    assert widget.max_point_selector.spinboxes[0].spinbox.value() == int(
+        new_max_point.real
+    )
+    assert widget.max_point_selector.spinboxes[1].spinbox.value() == int(
+        new_max_point.imag
+    )
+    assert widget.feedrate_selector.spinboxes[0].spinbox.value() == int(
+        new_normal_feedrate
+    )
+    assert widget.feedrate_selector.spinboxes[1].spinbox.value() == int(
+        new_travel_feedrate
+    )
+    assert widget.curve_resolution_spinbox.spinbox.value() == int(new_curve_resolution)
     assert widget.start_gcode_input.toPlainText() == "\n".join(new_start_gcode)
     assert widget.end_gcode_input.toPlainText() == "\n".join(new_end_gcode)
     assert widget.lift_gcode_input.toPlainText() == "\n".join(new_lift_gcode)
@@ -396,10 +344,10 @@ def test_changing_text_boxes_updates_options_no_max_point(
     new_normal_feedrate = mock_slicing_options.normal_feedrate + 1
     new_travel_feedrate = mock_slicing_options.travel_feedrate + 1
     new_curve_resolution = mock_slicing_options.curve_resolution + 1
-    new_start_gcode = mock_slicing_options.start_gcode + ["new start"]
-    new_end_gcode = mock_slicing_options.end_gcode + ["new end"]
-    new_lift_gcode = mock_slicing_options.lift_gcode + ["new lift"]
-    new_unlift_gcode = mock_slicing_options.unlift_gcode + ["new unlift"]
+    new_start_gcode = list(mock_slicing_options.start_gcode) + ["new start"]
+    new_end_gcode = list(mock_slicing_options.end_gcode) + ["new end"]
+    new_lift_gcode = list(mock_slicing_options.lift_gcode) + ["new lift"]
+    new_unlift_gcode = list(mock_slicing_options.unlift_gcode) + ["new unlift"]
 
     new_options = slicing_options.SlicingOptions(
         start_point=new_start_point,
@@ -415,13 +363,21 @@ def test_changing_text_boxes_updates_options_no_max_point(
     widget.options = new_options
     widget._update_option_text_fields()
 
-    assert widget.start_x_input.toPlainText() == str(new_start_point.real)
-    assert widget.start_y_input.toPlainText() == str(new_start_point.imag)
-    assert widget.max_x_input.toPlainText() == ""
-    assert widget.max_y_input.toPlainText() == ""
-    assert widget.normal_feedrate_input.toPlainText() == str(new_normal_feedrate)
-    assert widget.travel_feedrate_input.toPlainText() == str(new_travel_feedrate)
-    assert widget.curve_resolution_input.toPlainText() == str(new_curve_resolution)
+    assert widget.start_point_selector.spinboxes[0].spinbox.value() == int(
+        new_start_point.real
+    )
+    assert widget.start_point_selector.spinboxes[0].spinbox.value() == int(
+        new_start_point.imag
+    )
+    assert widget.max_point_selector.spinboxes[0].spinbox.value() == 0
+    assert widget.max_point_selector.spinboxes[1].spinbox.value() == 0
+    assert widget.feedrate_selector.spinboxes[0].spinbox.value() == int(
+        new_normal_feedrate
+    )
+    assert widget.feedrate_selector.spinboxes[1].spinbox.value() == int(
+        new_travel_feedrate
+    )
+    assert widget.curve_resolution_spinbox.spinbox.value() == int(new_curve_resolution)
     assert widget.start_gcode_input.toPlainText() == "\n".join(new_start_gcode)
     assert widget.end_gcode_input.toPlainText() == "\n".join(new_end_gcode)
     assert widget.lift_gcode_input.toPlainText() == "\n".join(new_lift_gcode)
@@ -521,10 +477,10 @@ def test_saving_options_file_prompts_selection_of_save_file(
             slicing_options.DEFAULT_NORMAL_FEEDRATE + 1,
             slicing_options.DEFAULT_TRAVEL_FEEDRATE + 1,
             slicing_options.DEFAULT_CURVE_RESOLUTION + 1,
-            slicing_options.DEFAULT_START_GCODE + ["start"],
-            slicing_options.DEFAULT_END_GCODE + ["end"],
-            slicing_options.DEFAULT_LIFT_GCODE + ["lift"],
-            slicing_options.DEFAULT_UNLIFT_GCODE + ["unlift"],
+            list(slicing_options.DEFAULT_START_GCODE) + ["start"],
+            list(slicing_options.DEFAULT_END_GCODE) + ["end"],
+            list(slicing_options.DEFAULT_LIFT_GCODE) + ["lift"],
+            list(slicing_options.DEFAULT_UNLIFT_GCODE) + ["unlift"],
             slicing_options.DEFAULT_START_POINT + complex(1, 1),
             complex(100, 100),
         ),
@@ -532,10 +488,10 @@ def test_saving_options_file_prompts_selection_of_save_file(
             None,
             slicing_options.DEFAULT_TRAVEL_FEEDRATE + 1,
             slicing_options.DEFAULT_CURVE_RESOLUTION + 1,
-            slicing_options.DEFAULT_START_GCODE + ["start"],
-            slicing_options.DEFAULT_END_GCODE + ["end"],
-            slicing_options.DEFAULT_LIFT_GCODE + ["lift"],
-            slicing_options.DEFAULT_UNLIFT_GCODE + ["unlift"],
+            list(slicing_options.DEFAULT_START_GCODE) + ["start"],
+            list(slicing_options.DEFAULT_END_GCODE) + ["end"],
+            list(slicing_options.DEFAULT_LIFT_GCODE) + ["lift"],
+            list(slicing_options.DEFAULT_UNLIFT_GCODE) + ["unlift"],
             slicing_options.DEFAULT_START_POINT + complex(1, 1),
             complex(100, 100),
         ),
@@ -543,10 +499,10 @@ def test_saving_options_file_prompts_selection_of_save_file(
             slicing_options.DEFAULT_NORMAL_FEEDRATE + 1,
             None,
             slicing_options.DEFAULT_CURVE_RESOLUTION + 1,
-            slicing_options.DEFAULT_START_GCODE + ["start"],
-            slicing_options.DEFAULT_END_GCODE + ["end"],
-            slicing_options.DEFAULT_LIFT_GCODE + ["lift"],
-            slicing_options.DEFAULT_UNLIFT_GCODE + ["unlift"],
+            list(slicing_options.DEFAULT_START_GCODE) + ["start"],
+            list(slicing_options.DEFAULT_END_GCODE) + ["end"],
+            list(slicing_options.DEFAULT_LIFT_GCODE) + ["lift"],
+            list(slicing_options.DEFAULT_UNLIFT_GCODE) + ["unlift"],
             slicing_options.DEFAULT_START_POINT + complex(1, 1),
             complex(100, 100),
         ),
@@ -554,10 +510,10 @@ def test_saving_options_file_prompts_selection_of_save_file(
             slicing_options.DEFAULT_NORMAL_FEEDRATE + 1,
             slicing_options.DEFAULT_TRAVEL_FEEDRATE + 1,
             None,
-            slicing_options.DEFAULT_START_GCODE + ["start"],
-            slicing_options.DEFAULT_END_GCODE + ["end"],
-            slicing_options.DEFAULT_LIFT_GCODE + ["lift"],
-            slicing_options.DEFAULT_UNLIFT_GCODE + ["unlift"],
+            list(slicing_options.DEFAULT_START_GCODE) + ["start"],
+            list(slicing_options.DEFAULT_END_GCODE) + ["end"],
+            list(slicing_options.DEFAULT_LIFT_GCODE) + ["lift"],
+            list(slicing_options.DEFAULT_UNLIFT_GCODE) + ["unlift"],
             slicing_options.DEFAULT_START_POINT + complex(1, 1),
             complex(100, 100),
         ),
@@ -566,9 +522,9 @@ def test_saving_options_file_prompts_selection_of_save_file(
             slicing_options.DEFAULT_TRAVEL_FEEDRATE + 1,
             slicing_options.DEFAULT_CURVE_RESOLUTION + 1,
             None,
-            slicing_options.DEFAULT_END_GCODE + ["end"],
-            slicing_options.DEFAULT_LIFT_GCODE + ["lift"],
-            slicing_options.DEFAULT_UNLIFT_GCODE + ["unlift"],
+            list(slicing_options.DEFAULT_END_GCODE) + ["end"],
+            list(slicing_options.DEFAULT_LIFT_GCODE) + ["lift"],
+            list(slicing_options.DEFAULT_UNLIFT_GCODE) + ["unlift"],
             slicing_options.DEFAULT_START_POINT + complex(1, 1),
             complex(100, 100),
         ),
@@ -576,10 +532,10 @@ def test_saving_options_file_prompts_selection_of_save_file(
             slicing_options.DEFAULT_NORMAL_FEEDRATE + 1,
             slicing_options.DEFAULT_TRAVEL_FEEDRATE + 1,
             slicing_options.DEFAULT_CURVE_RESOLUTION + 1,
-            slicing_options.DEFAULT_START_GCODE + ["start"],
+            list(slicing_options.DEFAULT_START_GCODE) + ["start"],
             None,
-            slicing_options.DEFAULT_LIFT_GCODE + ["lift"],
-            slicing_options.DEFAULT_UNLIFT_GCODE + ["unlift"],
+            list(slicing_options.DEFAULT_LIFT_GCODE) + ["lift"],
+            list(slicing_options.DEFAULT_UNLIFT_GCODE) + ["unlift"],
             slicing_options.DEFAULT_START_POINT + complex(1, 1),
             complex(100, 100),
         ),
@@ -587,10 +543,10 @@ def test_saving_options_file_prompts_selection_of_save_file(
             slicing_options.DEFAULT_NORMAL_FEEDRATE + 1,
             slicing_options.DEFAULT_TRAVEL_FEEDRATE + 1,
             slicing_options.DEFAULT_CURVE_RESOLUTION + 1,
-            slicing_options.DEFAULT_START_GCODE + ["start"],
-            slicing_options.DEFAULT_END_GCODE + ["end"],
+            list(slicing_options.DEFAULT_START_GCODE) + ["start"],
+            list(slicing_options.DEFAULT_END_GCODE) + ["end"],
             None,
-            slicing_options.DEFAULT_UNLIFT_GCODE + ["unlift"],
+            list(slicing_options.DEFAULT_UNLIFT_GCODE) + ["unlift"],
             slicing_options.DEFAULT_START_POINT + complex(1, 1),
             complex(100, 100),
         ),
@@ -598,9 +554,9 @@ def test_saving_options_file_prompts_selection_of_save_file(
             slicing_options.DEFAULT_NORMAL_FEEDRATE + 1,
             slicing_options.DEFAULT_TRAVEL_FEEDRATE + 1,
             slicing_options.DEFAULT_CURVE_RESOLUTION + 1,
-            slicing_options.DEFAULT_START_GCODE + ["start"],
-            slicing_options.DEFAULT_END_GCODE + ["end"],
-            slicing_options.DEFAULT_LIFT_GCODE + ["lift"],
+            list(slicing_options.DEFAULT_START_GCODE) + ["start"],
+            list(slicing_options.DEFAULT_END_GCODE) + ["end"],
+            list(slicing_options.DEFAULT_LIFT_GCODE) + ["lift"],
             None,
             slicing_options.DEFAULT_START_POINT + complex(1, 1),
             complex(100, 100),
@@ -609,10 +565,10 @@ def test_saving_options_file_prompts_selection_of_save_file(
             slicing_options.DEFAULT_NORMAL_FEEDRATE + 1,
             slicing_options.DEFAULT_TRAVEL_FEEDRATE + 1,
             slicing_options.DEFAULT_CURVE_RESOLUTION + 1,
-            slicing_options.DEFAULT_START_GCODE + ["start"],
-            slicing_options.DEFAULT_END_GCODE + ["end"],
-            slicing_options.DEFAULT_LIFT_GCODE + ["lift"],
-            slicing_options.DEFAULT_UNLIFT_GCODE + ["unlift"],
+            list(slicing_options.DEFAULT_START_GCODE) + ["start"],
+            list(slicing_options.DEFAULT_END_GCODE) + ["end"],
+            list(slicing_options.DEFAULT_LIFT_GCODE) + ["lift"],
+            list(slicing_options.DEFAULT_UNLIFT_GCODE) + ["unlift"],
             None,
             complex(100, 100),
         ),
@@ -620,10 +576,10 @@ def test_saving_options_file_prompts_selection_of_save_file(
             slicing_options.DEFAULT_NORMAL_FEEDRATE + 1,
             slicing_options.DEFAULT_TRAVEL_FEEDRATE + 1,
             slicing_options.DEFAULT_CURVE_RESOLUTION + 1,
-            slicing_options.DEFAULT_START_GCODE + ["start"],
-            slicing_options.DEFAULT_END_GCODE + ["end"],
-            slicing_options.DEFAULT_LIFT_GCODE + ["lift"],
-            slicing_options.DEFAULT_UNLIFT_GCODE + ["unlift"],
+            list(slicing_options.DEFAULT_START_GCODE) + ["start"],
+            list(slicing_options.DEFAULT_END_GCODE) + ["end"],
+            list(slicing_options.DEFAULT_LIFT_GCODE) + ["lift"],
+            list(slicing_options.DEFAULT_UNLIFT_GCODE) + ["unlift"],
             slicing_options.DEFAULT_START_POINT + complex(1, 1),
             None,
         ),
@@ -760,15 +716,6 @@ def test_loading_default_options_from_file_that_doesnt_exist(
     )
     monkeypatch.setattr(slicing_options.pathlib.Path, "is_file", mock_is_file)
 
-    mock_update_option_text_fields: mock.MagicMock = mock.create_autospec(
-        slicing_options.SlicingOptionsWiget._update_option_text_fields
-    )
-    monkeypatch.setattr(
-        slicing_options.SlicingOptionsWiget,
-        "_update_option_text_fields",
-        mock_update_option_text_fields,
-    )
-
     mock_load_options: mock.MagicMock = mock.create_autospec(
         slicing_options.SlicingOptionsWiget.load_options
     )
@@ -779,41 +726,18 @@ def test_loading_default_options_from_file_that_doesnt_exist(
     widget = slicing_options.SlicingOptionsWiget()
     qtbot.addWidget(widget)
 
-    mock_update_option_text_fields.assert_called_once()
+    assert widget.options.start_point == slicing_options.DEFAULT_START_POINT
+    assert widget.options.max_point == slicing_options.DEFAULT_MAX_POINT
+    assert widget.options.normal_feedrate == slicing_options.DEFAULT_NORMAL_FEEDRATE
+    assert widget.options.travel_feedrate == slicing_options.DEFAULT_TRAVEL_FEEDRATE
+    assert widget.options.curve_resolution == slicing_options.DEFAULT_CURVE_RESOLUTION
+    assert widget.options.blade_offset == slicing_options.DEFAULT_BLADE_OFFSET
+    assert widget.options.start_gcode == slicing_options.DEFAULT_START_GCODE
+    assert widget.options.end_gcode == slicing_options.DEFAULT_END_GCODE
+    assert widget.options.lift_gcode == slicing_options.DEFAULT_LIFT_GCODE
+    assert widget.options.unlift_gcode == slicing_options.DEFAULT_UNLIFT_GCODE
+
     mock_load_options.assert_not_called()
-
-
-# endregion
-# region SlicingOptionsWiget.update_options
-
-
-def test_update_options_reads_from_text_boxes(
-    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
-):
-    """Tests that updating options reads floats and ints from text boxes"""
-
-    mock_read_int: mock.MagicMock = mock.create_autospec(
-        slicing_options.SlicingOptionsWiget._read_int
-    )
-    mock_read_float: mock.MagicMock = mock.create_autospec(
-        slicing_options.SlicingOptionsWiget._read_float
-    )
-    mock_to_plain_text: mock.MagicMock = mock.create_autospec(QTextEdit.toPlainText)
-
-    monkeypatch.setattr(slicing_options.SlicingOptionsWiget, "_read_int", mock_read_int)
-    monkeypatch.setattr(
-        slicing_options.SlicingOptionsWiget, "_read_float", mock_read_float
-    )
-    monkeypatch.setattr(slicing_options.QTextEdit, "toPlainText", mock_to_plain_text)
-
-    widget = slicing_options.SlicingOptionsWiget()
-    qtbot.addWidget(widget)
-
-    widget.update_options()
-
-    assert mock_read_int.call_count == 3
-    assert mock_read_float.call_count == 4
-    assert mock_to_plain_text.call_count == 4
 
 
 # endregion

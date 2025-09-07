@@ -76,6 +76,27 @@ class GcodeGenerator:
         self.gcode: list[str] = []
         self.points: list[GcodePoint] = []
 
+    def _get_overcut(self, end_point: complex, current_point: complex) -> complex:
+        """
+        Draws straight line between 2 points with overlap to account for blade offset
+
+        Args:
+            end_point: point to connect to
+            current_point: point to connect from
+        """
+
+        print(f"{end_point=}")
+        print(f"{current_point=}")
+
+        distance = math.dist(
+            (current_point.real, current_point.imag),
+            (end_point.real, end_point.imag),
+        )
+
+        vector: complex = (end_point - current_point) / distance
+
+        return current_point + distance * vector
+
     # pylint: disable=too-many-return-statements
     def _get_direction(self, start: complex, end: complex) -> float:
         """
@@ -131,12 +152,16 @@ class GcodeGenerator:
         y_scale: float = 1.0
 
         if self.options.max_point:
-            x_scale = self.options.max_point.real / self.largest_x
-            y_scale = self.options.max_point.imag / self.largest_y
+            if (
+                self.largest_x > self.options.max_point.real
+                or self.largest_y > self.options.max_point.imag
+            ):
+                x_scale = self.options.max_point.real / self.largest_x
+                y_scale = self.options.max_point.imag / self.largest_y
 
         return min(x_scale, y_scale)
 
-    def _line_to_points(self, line: svgpathtools.Line) -> Iterable[complex]:
+    def _line_to_points(self, line: svgpathtools.Line) -> tuple[complex, complex]:
         """
         Converts a line to points
 
@@ -264,17 +289,17 @@ class GcodeGenerator:
 
         return points
 
-    def _extend_gcode_points(self, new_points: Iterable[complex], raised: bool):
+    def _extend_gcode_points(self, new_points: Iterable[complex], new_shape: bool):
         """
         Extends self.points from complex numbers
 
         Args:
             new_points: point to create
-            raised: travel to next point raised
+            new_shape: points are for a different shape and Z axis should move up
         """
         for point in new_points:
-            self.points.append(GcodePoint(point=point, raised=raised))
-            raised = False
+            self.points.append(GcodePoint(point=point, raised=new_shape))
+            new_shape = False
 
     def _get_points(self, paths: tuple[list[svgpathtools.Path], ...]):
         """
@@ -287,15 +312,12 @@ class GcodeGenerator:
             all_points: gcode points found
         """
         self.points.clear()
-        new_points: Iterable[complex]
+        new_points: list[complex] | tuple[complex, ...]
         prev_end: complex = complex(0, 0)
 
-        raised = False
+        new_shape: bool = False
         for path in paths:
             for subpath in path:
-                if prev_end != subpath.start:
-                    raised = True
-
                 if isinstance(subpath, svgpathtools.Line):
                     new_points = self._line_to_points(subpath)
                 elif isinstance(subpath, svgpathtools.Arc):
@@ -307,8 +329,10 @@ class GcodeGenerator:
                 else:
                     continue
 
-                self._extend_gcode_points(new_points, raised)
-                raised = False
+                if prev_end != subpath.start:
+                    new_shape = True
+                self._extend_gcode_points(new_points, new_shape)
+                new_shape = False
                 prev_end = subpath.end
 
     def generate_gcode(self, svg_path: pathlib.Path):
@@ -328,6 +352,7 @@ class GcodeGenerator:
         self.gcode.extend(self.options.start_gcode)
 
         scale = self._get_scale()
+        print(f"{scale=}")
         for point in self.points:
             self.gcode.extend(point.get_gcode(scale, self.options))
 

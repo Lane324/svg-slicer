@@ -5,6 +5,7 @@ Holds slicing options
 import pathlib
 import tomllib
 from dataclasses import dataclass
+from typing import Iterable
 
 import tomli_w
 from PySide6.QtCore import Slot
@@ -20,17 +21,24 @@ from PySide6.QtWidgets import (
 )
 
 from svg_slicer import helpers
+from svg_slicer.widgets.labeled_spin_box import (
+    LabeledDoubleSpinBox,
+    LabeledSpinBox,
+    LabeledSpinBoxConfig,
+    MultiLabeledSpinBox,
+)
 
 DEFAULT_TOML_PATH = (
     pathlib.Path().home() / "AppData" / "Roaming" / "svg-slicer" / "svg-slicer.toml"
 )
 
-DEFAULT_START_POINT = complex(1, 1)
-DEFAULT_MAX_POINT = None
-DEFAULT_NORMAL_FEEDRATE = 500
-DEFAULT_TRAVEL_FEEDRATE = 4000
-DEFAULT_CURVE_RESOLUTION = 20
-DEFAULT_START_GCODE = [
+DEFAULT_START_POINT: complex = complex(1, 1)
+DEFAULT_MAX_POINT: complex | None = None
+DEFAULT_NORMAL_FEEDRATE: int = 500
+DEFAULT_TRAVEL_FEEDRATE: int = 4000
+DEFAULT_CURVE_RESOLUTION: int = 20
+DEFAULT_BLADE_OFFSET: float = 0.0
+DEFAULT_START_GCODE: tuple[str, ...] = (
     "; start",
     "M107 ; turn fan off",
     "G21 ; use millimeter",
@@ -40,10 +48,10 @@ DEFAULT_START_GCODE = [
     "G28 ; home xyz axes",
     "G1 F500 ; set feedrate",
     "",
-]
-DEFAULT_END_GCODE = ["; end"]
-DEFAULT_LIFT_GCODE = ["G1 Z10"]
-DEFAULT_UNLIFT_GCODE = ["G1 Z0"]
+)
+DEFAULT_END_GCODE: tuple[str, ...] = ("; end",)
+DEFAULT_LIFT_GCODE: tuple[str, ...] = ("G1 Z10",)
+DEFAULT_UNLIFT_GCODE: tuple[str, ...] = ("G1 Z0",)
 
 
 # pylint: disable=too-many-instance-attributes
@@ -51,15 +59,16 @@ DEFAULT_UNLIFT_GCODE = ["G1 Z0"]
 class SlicingOptions:
     """Holds slicing options"""
 
-    start_point: complex
-    max_point: complex | None
-    normal_feedrate: int
-    travel_feedrate: int
-    curve_resolution: int
-    start_gcode: list[str]
-    end_gcode: list[str]
-    lift_gcode: list[str]
-    unlift_gcode: list[str]
+    start_point: complex = DEFAULT_START_POINT
+    max_point: complex | None = DEFAULT_MAX_POINT
+    normal_feedrate: int = DEFAULT_NORMAL_FEEDRATE
+    travel_feedrate: int = DEFAULT_TRAVEL_FEEDRATE
+    curve_resolution: int = DEFAULT_CURVE_RESOLUTION
+    blade_offset: float = DEFAULT_BLADE_OFFSET
+    start_gcode: Iterable[str] = DEFAULT_START_GCODE
+    end_gcode: Iterable[str] = DEFAULT_END_GCODE
+    lift_gcode: Iterable[str] = DEFAULT_LIFT_GCODE
+    unlift_gcode: Iterable[str] = DEFAULT_UNLIFT_GCODE
 
     def get_dict(self) -> dict:
         """Turns instance into a TOML serializable dic"""
@@ -103,8 +112,10 @@ class SlicingOptionsWiget(QWidget):
         if options:
             self.options = options
         elif options_file:
+            self.options: SlicingOptions = SlicingOptions()
             self.load_options(options_file)
         else:
+            self.options: SlicingOptions = SlicingOptions()
             self._load_default()
 
     def _create_widgets(self):
@@ -112,23 +123,37 @@ class SlicingOptionsWiget(QWidget):
         self.status_bar = QStatusBar()
 
         # Input boxes
-        self.start_x_input = QTextEdit()
-        self.start_y_input = QTextEdit()
-        self.max_x_input = QTextEdit()
-        self.max_y_input = QTextEdit()
-        self.normal_feedrate_input = QTextEdit()
-        self.travel_feedrate_input = QTextEdit()
-        self.curve_resolution_input = QTextEdit()
+        self.start_point_selector = MultiLabeledSpinBox(
+            title="Start Point",
+            configs=(
+                LabeledSpinBoxConfig(label="X", suffix=" mm"),
+                LabeledSpinBoxConfig(label="Y", suffix=" mm"),
+            ),
+        )
+        self.max_point_selector = MultiLabeledSpinBox(
+            title="Max Point",
+            configs=(
+                LabeledSpinBoxConfig(label="X", suffix=" mm", maximum=10000),
+                LabeledSpinBoxConfig(label="Y", suffix=" mm", maximum=10000),
+            ),
+        )
+        self.feedrate_selector = MultiLabeledSpinBox(
+            title="Feedrates",
+            configs=(
+                LabeledSpinBoxConfig(label="Normal", suffix=" mm/min", maximum=10000),
+                LabeledSpinBoxConfig(label="Travel", suffix=" mm/min", maximum=10000),
+            ),
+        )
+
+        self.curve_resolution_spinbox = LabeledSpinBox(label_text="Curve Resolution")
+        self.blade_offset_spinbox = LabeledDoubleSpinBox(label_text="Blade Offset")
+
         self.start_gcode_input = QTextEdit()
         self.end_gcode_input = QTextEdit()
         self.lift_gcode_input = QTextEdit()
         self.unlift_gcode_input = QTextEdit()
 
         # Input groups
-        self.start_point_group = QGroupBox(title="Start Point")
-        self.max_point_group = QGroupBox(title="Max Point")
-        self.normal_feedrate_group = QGroupBox(title="Normal Feedrate")
-        self.travel_feedrate_group = QGroupBox(title="Travel Feedrate")
         self.curve_resolution_group = QGroupBox(title="Curve Resolution")
         self.start_gcode_group = QGroupBox(title="Start Gcode")
         self.end_gcode_group = QGroupBox(title="End Gcode")
@@ -145,40 +170,63 @@ class SlicingOptionsWiget(QWidget):
         """Connects widgets to their slots"""
         self.load_button.clicked.connect(self._load_options_file)
         self.save_to_file_button.clicked.connect(self._save_options_file)
+        self.start_point_selector.spinboxes[0].spinbox.valueChanged.connect(
+            self._start_x_changed
+        )
+        self.start_point_selector.spinboxes[1].spinbox.valueChanged.connect(
+            self._start_y_changed
+        )
+        self.max_point_selector.spinboxes[0].spinbox.valueChanged.connect(
+            self._max_x_changed
+        )
+        self.max_point_selector.spinboxes[1].spinbox.valueChanged.connect(
+            self._max_y_changed
+        )
+        self.feedrate_selector.spinboxes[0].spinbox.valueChanged.connect(
+            self._normal_feedrate_changed
+        )
+        self.feedrate_selector.spinboxes[1].spinbox.valueChanged.connect(
+            self._travel_feedrate_changed
+        )
+        self.curve_resolution_spinbox.spinbox.valueChanged.connect(
+            self._curve_resolution_changed
+        )
+        self.blade_offset_spinbox.spinbox.valueChanged.connect(
+            self._blade_offset_changed
+        )
+        self.start_gcode_input.textChanged.connect(self._start_gcode_changed)
+        self.end_gcode_input.textChanged.connect(self._end_gcode_changed)
+        self.lift_gcode_input.textChanged.connect(self._lift_gcode_changed)
+        self.unlift_gcode_input.textChanged.connect(self._unlift_gcode_changed)
 
     def _create_layouts(self):
         """Creates and congiures all layouts in widget"""
         self.main_layout = QVBoxLayout()
 
         # Input layouts
-        self.start_point_layout = QHBoxLayout()
-        self.max_point_layout = QHBoxLayout()
-        self.normal_feedrate_layout = QHBoxLayout()
-        self.travel_feedrate_layout = QHBoxLayout()
-        self.curve_resolution_layout = QHBoxLayout()
+        self.point_feedrate_layout = QHBoxLayout()
+        self.curve_resolution_layout = QVBoxLayout()
         self.start_gcode_layout = QHBoxLayout()
         self.end_gcode_layout = QHBoxLayout()
         self.lift_gcode_layout = QHBoxLayout()
         self.unlift_gcode_layout = QHBoxLayout()
-
         self.button_layout = QHBoxLayout()
 
-        self.start_point_layout.addWidget(self.start_x_input)
-        self.start_point_layout.addWidget(self.start_y_input)
-        self.max_point_layout.addWidget(self.max_x_input)
-        self.max_point_layout.addWidget(self.max_y_input)
-        self.normal_feedrate_layout.addWidget(self.normal_feedrate_input)
-        self.travel_feedrate_layout.addWidget(self.travel_feedrate_input)
-        self.curve_resolution_layout.addWidget(self.curve_resolution_input)
+        self.curve_resolution_layout.addWidget(self.curve_resolution_spinbox)
+        self.curve_resolution_layout.addWidget(self.blade_offset_spinbox)
+        self.curve_resolution_group.setLayout(self.curve_resolution_layout)
+        self.point_feedrate_layout.addWidget(self.curve_resolution_group)
+
+        self.point_feedrate_layout.addWidget(self.start_point_selector)
+        self.point_feedrate_layout.addWidget(self.max_point_selector)
+        self.point_feedrate_layout.addWidget(self.feedrate_selector)
+        self.curve_resolution_group
+        self.point_feedrate_layout.addWidget(self.curve_resolution_group)
         self.start_gcode_layout.addWidget(self.start_gcode_input)
         self.end_gcode_layout.addWidget(self.end_gcode_input)
         self.lift_gcode_layout.addWidget(self.lift_gcode_input)
         self.unlift_gcode_layout.addWidget(self.unlift_gcode_input)
 
-        self.start_point_group.setLayout(self.start_point_layout)
-        self.max_point_group.setLayout(self.max_point_layout)
-        self.normal_feedrate_group.setLayout(self.normal_feedrate_layout)
-        self.travel_feedrate_group.setLayout(self.travel_feedrate_layout)
         self.curve_resolution_group.setLayout(self.curve_resolution_layout)
         self.start_gcode_group.setLayout(self.start_gcode_layout)
         self.end_gcode_group.setLayout(self.end_gcode_layout)
@@ -189,10 +237,6 @@ class SlicingOptionsWiget(QWidget):
         self.button_layout.addWidget(self.save_to_file_button)
 
         groups = (
-            self.start_point_group,
-            self.max_point_group,
-            self.normal_feedrate_group,
-            self.travel_feedrate_group,
             self.curve_resolution_group,
             self.start_gcode_group,
             self.end_gcode_group,
@@ -204,6 +248,7 @@ class SlicingOptionsWiget(QWidget):
         content_layout = QVBoxLayout()
         content.setLayout(content_layout)
 
+        content_layout.addLayout(self.point_feedrate_layout)
         for group in groups:
             content_layout.addWidget(group)
 
@@ -215,53 +260,32 @@ class SlicingOptionsWiget(QWidget):
 
         self.setLayout(self.main_layout)
 
-    def _read_float(self, text_box: QTextEdit) -> float | None:
-        """
-        Reads float from text box
-
-        Args:
-            text_box: text box to read text from
-
-        Returns:
-            float conversion of text in text box if it can be converted
-        """
-        str_value = text_box.toPlainText()
-        try:
-            float_value = float(str_value)
-        except ValueError:
-            return None
-        return float_value
-
-    def _read_int(self, text_box: QTextEdit) -> int | None:
-        """
-        Reads integer from text box
-
-        Args:
-            text_box: text box to read text from
-
-        Returns:
-            int conversion of text in text box if it can be converted
-        """
-        str_value = text_box.toPlainText()
-        try:
-            int_value = int(str_value)
-        except ValueError:
-            return None
-        return int_value
-
     def _update_option_text_fields(self):
         """Update text fields with set options"""
-        self.start_x_input.setPlainText(str(self.options.start_point.real))
-        self.start_y_input.setPlainText(str(self.options.start_point.imag))
+        self.start_point_selector.spinboxes[0].spinbox.setValue(
+            int(self.options.start_point.real)
+        )
+        self.start_point_selector.spinboxes[1].spinbox.setValue(
+            int(self.options.start_point.imag)
+        )
 
         if isinstance(self.options.max_point, complex):
-            self.max_x_input.setPlainText(str(self.options.max_point.real))
-            self.max_y_input.setPlainText(str(self.options.max_point.imag))
+            self.max_point_selector.spinboxes[0].spinbox.setValue(
+                int(self.options.max_point.real)
+            )
+            self.max_point_selector.spinboxes[1].spinbox.setValue(
+                int(self.options.max_point.imag)
+            )
 
-        self.normal_feedrate_input.setPlainText(str(self.options.normal_feedrate))
-        self.travel_feedrate_input.setPlainText(str(self.options.travel_feedrate))
+        self.feedrate_selector.spinboxes[0].spinbox.setValue(
+            self.options.normal_feedrate
+        )
+        self.feedrate_selector.spinboxes[1].spinbox.setValue(
+            self.options.travel_feedrate
+        )
 
-        self.curve_resolution_input.setPlainText(str(self.options.curve_resolution))
+        self.curve_resolution_spinbox.spinbox.setValue(self.options.curve_resolution)
+        self.blade_offset_spinbox.spinbox.setValue(self.options.blade_offset)
 
         self.start_gcode_input.setPlainText("\n".join(self.options.start_gcode))
         self.end_gcode_input.setPlainText("\n".join(self.options.end_gcode))
@@ -286,6 +310,64 @@ class SlicingOptionsWiget(QWidget):
 
         self.status_bar.showMessage(f"Config written to {file_name}")
 
+    @Slot()
+    def _start_x_changed(self, new_value: int):
+        self.options.start_point = complex(new_value, self.options.start_point.imag)
+
+    @Slot()
+    def _start_y_changed(self, new_value: int):
+        self.options.start_point = complex(self.options.start_point.imag, new_value)
+
+    @Slot()
+    def _max_x_changed(self, new_value: int):
+        if self.options.max_point:
+            self.options.max_point = complex(new_value, self.options.max_point.imag)
+        else:
+            self.options.max_point = complex(
+                new_value, self.max_point_selector.spinboxes[1].spinbox.value()
+            )
+
+    @Slot()
+    def _max_y_changed(self, new_value: int):
+        if self.options.max_point:
+            self.options.max_point = complex(self.options.max_point.imag, new_value)
+        else:
+            self.options.max_point = complex(
+                self.max_point_selector.spinboxes[0].spinbox.value(), new_value
+            )
+
+    @Slot()
+    def _normal_feedrate_changed(self, new_value: int):
+        self.options.normal_feedrate = new_value
+
+    @Slot()
+    def _travel_feedrate_changed(self, new_value: int):
+        self.options.travel_feedrate = new_value
+
+    @Slot()
+    def _curve_resolution_changed(self, new_value: int):
+        self.options.curve_resolution = new_value
+
+    @Slot()
+    def _blade_offset_changed(self, new_value: float):
+        self.options.blade_offset = new_value
+
+    @Slot()
+    def _start_gcode_changed(self):
+        self.options.start_gcode = self.start_gcode_input.toPlainText().splitlines()
+
+    @Slot()
+    def _end_gcode_changed(self):
+        self.options.end_gcode = self.end_gcode_input.toPlainText().splitlines()
+
+    @Slot()
+    def _lift_gcode_changed(self):
+        self.options.lift_gcode = self.lift_gcode_input.toPlainText().splitlines()
+
+    @Slot()
+    def _unlift_gcode_changed(self):
+        self.options.unlift_gcode = self.unlift_gcode_input.toPlainText().splitlines()
+
     # pylint: disable=too-many-locals
     def load_options(self, file: pathlib.Path):
         """
@@ -297,81 +379,38 @@ class SlicingOptionsWiget(QWidget):
         with file.open("rb") as f:
             data = tomllib.load(f)
 
-        point_data: dict[str, int] | None = data.get("point")
-        start_point = (
-            complex(point_data.get("start_x") or 0, point_data.get("start_y") or 0)
-            if point_data
-            else DEFAULT_START_POINT
-        )
-        max_x = point_data.get("max_x") if point_data else None
-        max_y = point_data.get("max_y") if point_data else None
-        if max_x and max_y:
-            max_point = complex(max_x, max_y)
-        else:
-            max_point = None
-
-        machine_data: dict[str, int] | None = data.get("machine")
-        normal_feedrate = (
-            machine_data.get("normal_feedrate") or DEFAULT_NORMAL_FEEDRATE
-            if machine_data
-            else DEFAULT_NORMAL_FEEDRATE
-        )
-        travel_feedrate = (
-            machine_data.get("travel_feedrate") or DEFAULT_TRAVEL_FEEDRATE
-            if machine_data
-            else DEFAULT_TRAVEL_FEEDRATE
-        )
-        curve_resolution = (
-            machine_data.get("curve_resolution") or DEFAULT_CURVE_RESOLUTION
-            if machine_data
-            else DEFAULT_CURVE_RESOLUTION
-        )
-
-        gcode_data: dict[str, list[str]] | None = data.get("gcode")
-        start_gcode = (
-            gcode_data.get("start") or DEFAULT_START_GCODE
-            if gcode_data
-            else DEFAULT_START_GCODE
-        )
-        end_gcode = (
-            gcode_data.get("end") or DEFAULT_START_GCODE
-            if gcode_data
-            else DEFAULT_START_GCODE
-        )
-        lift_gcode = (
-            gcode_data.get("lift") or DEFAULT_LIFT_GCODE
-            if gcode_data
-            else DEFAULT_LIFT_GCODE
-        )
-        unlift_gcode = (
-            gcode_data.get("unlift") or DEFAULT_UNLIFT_GCODE
-            if gcode_data
-            else DEFAULT_UNLIFT_GCODE
-        )
-
-        if hasattr(self, "options") and isinstance(self.options, SlicingOptions):
-            self.options.start_point = start_point
-            self.options.max_point = max_point
-            self.options.normal_feedrate = normal_feedrate
-            self.options.travel_feedrate = travel_feedrate
-            self.options.curve_resolution = curve_resolution
-            self.options.start_gcode = start_gcode
-            self.options.end_gcode = end_gcode
-            self.options.lift_gcode = lift_gcode
-            self.options.unlift_gcode = unlift_gcode
-            self.options.max_point = max_point
-        else:
-            self.options = SlicingOptions(
-                start_point=start_point,
-                max_point=max_point,
-                normal_feedrate=normal_feedrate,
-                travel_feedrate=travel_feedrate,
-                curve_resolution=curve_resolution,
-                start_gcode=start_gcode,
-                end_gcode=end_gcode,
-                lift_gcode=lift_gcode,
-                unlift_gcode=unlift_gcode,
+        if point_data := data.get("point"):
+            self.options.start_point = complex(
+                point_data.get("start_x") or DEFAULT_START_POINT.real,
+                point_data.get("start_y") or DEFAULT_START_POINT.imag,
             )
+
+            max_x = point_data.get("max_x") if point_data else None
+            max_y = point_data.get("max_y") if point_data else None
+            if max_x and max_y:
+                self.options.max_point = complex(max_x, max_y)
+            else:
+                self.options.max_point = None
+
+        if machine_data := data.get("machine"):
+            self.options.normal_feedrate = (
+                machine_data.get("normal_feedrate") or DEFAULT_NORMAL_FEEDRATE
+            )
+            self.options.travel_feedrate = (
+                machine_data.get("travel_feedrate") or DEFAULT_TRAVEL_FEEDRATE
+            )
+            self.options.curve_resolution = (
+                machine_data.get("curve_resolution") or DEFAULT_CURVE_RESOLUTION
+            )
+            self.options.blade_offset = (
+                machine_data.get("blade_offset") or DEFAULT_BLADE_OFFSET
+            )
+
+        if gcode_data := data.get("gcode"):
+            self.options.start_gcode = gcode_data.get("start") or DEFAULT_START_GCODE
+            self.options.end_gcode = gcode_data.get("end") or DEFAULT_END_GCODE
+            self.options.lift_gcode = gcode_data.get("lift") or DEFAULT_LIFT_GCODE
+            self.options.unlift_gcode = gcode_data.get("unlift") or DEFAULT_UNLIFT_GCODE
 
         self._update_option_text_fields()
         self.status_bar.showMessage(f"Loaded options from: {file}")
@@ -382,58 +421,5 @@ class SlicingOptionsWiget(QWidget):
             self.status_bar.showMessage(
                 f"Could not find options file at {DEFAULT_TOML_PATH}"
             )
-            self.options = SlicingOptions(
-                start_point=DEFAULT_START_POINT,
-                max_point=DEFAULT_MAX_POINT,
-                normal_feedrate=DEFAULT_NORMAL_FEEDRATE,
-                travel_feedrate=DEFAULT_TRAVEL_FEEDRATE,
-                curve_resolution=DEFAULT_CURVE_RESOLUTION,
-                start_gcode=DEFAULT_START_GCODE,
-                end_gcode=DEFAULT_END_GCODE,
-                lift_gcode=DEFAULT_LIFT_GCODE,
-                unlift_gcode=DEFAULT_UNLIFT_GCODE,
-            )
-            self._update_option_text_fields()
             return
         self.load_options(DEFAULT_TOML_PATH)
-
-    def update_options(self):
-        """Read from text input and update slicer options"""
-        start_point = complex(
-            self._read_float(self.start_x_input) or 0.0,
-            self._read_float(self.start_y_input) or 0.0,
-        )
-        max_point = complex(
-            self._read_float(self.max_x_input) or 0.0,
-            self._read_float(self.max_y_input) or 0.0,
-        )
-        normal_feedrate = (
-            self._read_int(self.normal_feedrate_input) or DEFAULT_NORMAL_FEEDRATE
-        )
-        travel_feedrate = (
-            self._read_int(self.travel_feedrate_input) or DEFAULT_TRAVEL_FEEDRATE
-        )
-        curve_resolution = (
-            self._read_int(self.curve_resolution_input) or DEFAULT_CURVE_RESOLUTION
-        )
-        start_gcode = (
-            self.start_gcode_input.toPlainText().splitlines() or DEFAULT_START_GCODE
-        )
-        end_gcode = self.end_gcode_input.toPlainText().splitlines() or DEFAULT_END_GCODE
-        lift_gcode = (
-            self.lift_gcode_input.toPlainText().splitlines() or DEFAULT_LIFT_GCODE
-        )
-        unlift_gcode = (
-            self.unlift_gcode_input.toPlainText().splitlines() or DEFAULT_UNLIFT_GCODE
-        )
-
-        self.options.start_point = start_point
-        self.options.max_point = max_point
-        self.options.normal_feedrate = normal_feedrate
-        self.options.travel_feedrate = travel_feedrate
-        self.options.curve_resolution = curve_resolution
-        self.options.start_gcode = start_gcode
-        self.options.end_gcode = end_gcode
-        self.options.lift_gcode = lift_gcode
-        self.options.unlift_gcode = unlift_gcode
-        self.options.max_point = max_point
