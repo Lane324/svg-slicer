@@ -76,26 +76,34 @@ class GcodeGenerator:
         self.gcode: list[str] = []
         self.points: list[GcodePoint] = []
 
-    def _get_overcut(self, end_point: complex, current_point: complex) -> complex:
+    def _get_overcut(self, shape_start: complex, last_point: complex) -> complex:
         """
         Draws straight line between 2 points with overlap to account for blade offset
 
         Args:
-            end_point: point to connect to
-            current_point: point to connect from
+            shape_start: point to connect to
+            last_point: point to connect from
         """
 
-        print(f"{end_point=}")
-        print(f"{current_point=}")
-
         distance = math.dist(
-            (current_point.real, current_point.imag),
-            (end_point.real, end_point.imag),
+            (last_point.real, last_point.imag),
+            (shape_start.real, shape_start.imag),
         )
 
-        vector: complex = (end_point - current_point) / distance
+        vector: complex = (shape_start - last_point) / distance
 
-        return current_point + distance * vector
+        # print("==========")
+        # print(f"{shape_start=}")
+        # print(f"{last_point=}")
+        # print(f"{self.options.blade_offset=}")
+        # print("==========")
+        # print(f"{distance=}")
+        # print(f"{shape_start - last_point=}")
+        # print(f"{vector=}")
+        # print(f"{shape_start + self.options.blade_offset * vector=}")
+        # print("==========")
+
+        return shape_start + self.options.blade_offset * vector
 
     # pylint: disable=too-many-return-statements
     def _get_direction(self, start: complex, end: complex) -> float:
@@ -136,7 +144,7 @@ class GcodeGenerator:
 
         return 0.0  # pragma no cover
 
-    def _line_to_points(self, line: svgpathtools.Line) -> tuple[complex, complex]:
+    def _line_to_points(self, line: svgpathtools.Line) -> list[complex]:
         """
         Converts a line to points
 
@@ -150,7 +158,7 @@ class GcodeGenerator:
         self.largest_x = max(self.largest_x, line.start.real, line.end.real)
         self.largest_y = max(self.largest_y, line.start.imag, line.end.imag)
 
-        return (line.start, line.end)
+        return [line.start, line.end]
 
     def _arc_to_points(self, arc: svgpathtools.Arc) -> list[complex]:
         """
@@ -287,12 +295,20 @@ class GcodeGenerator:
             all_points: gcode points found
         """
         self.points.clear()
-        new_points: list[complex] | tuple[complex, ...]
+        new_points: list[complex] = []
         prev_end: complex = complex(0, 0)
 
-        new_shape: bool = False
+        shape_start: complex = paths[0][0].start
+        raised: bool = False
         for path in paths:
             for subpath in path:
+                if subpath.start != prev_end:
+                    raised = True
+                    if len(new_points) >= 2:
+                        over_cut_point = self._get_overcut(shape_start, new_points[-2])
+                        self._extend_gcode_points((over_cut_point,), False)
+                    shape_start = subpath.start
+
                 if isinstance(subpath, svgpathtools.Line):
                     new_points = self._line_to_points(subpath)
                 elif isinstance(subpath, svgpathtools.Arc):
@@ -304,11 +320,11 @@ class GcodeGenerator:
                 else:
                     continue
 
-                if prev_end != subpath.start:
-                    new_shape = True
-                self._extend_gcode_points(new_points, new_shape)
-                new_shape = False
+                self._extend_gcode_points(new_points, raised)
+                raised = False
                 prev_end = subpath.end
+        over_cut_point = self._get_overcut(shape_start, new_points[-2])
+        self._extend_gcode_points((over_cut_point,), False)
 
     def generate_gcode(self, svg_path: pathlib.Path):
         """
@@ -321,6 +337,13 @@ class GcodeGenerator:
 
         parsed = svgpathtools.svg2paths(svg_path)
         paths: tuple[list[svgpathtools.Path]] = parsed[0]
+
+        # sometimes a very small Line is parsed from the SVG
+        if isinstance(paths[-1][-1], svgpathtools.Line):
+            line = paths[-1][-1]
+            if abs(line.start - line.end) < 0.001:
+                del paths[-1][-1]
+
         self._get_points(paths)
 
         self.gcode.extend(HEADER)

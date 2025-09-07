@@ -336,9 +336,11 @@ class SlicingOptionsWiget(QWidget):
             data = tomllib.load(f)
 
         if point_data := data.get("point"):
+            start_x = point_data.get("start_x")
+            start_y = point_data.get("start_y")
             self.options.start_point = complex(
-                point_data.get("start_x") or DEFAULT_START_POINT.real,
-                point_data.get("start_y") or DEFAULT_START_POINT.imag,
+                start_x if start_x is not None else DEFAULT_START_POINT.real,
+                start_y if start_y is not None else DEFAULT_START_POINT.imag,
             )
 
         if machine_data := data.get("machine"):
