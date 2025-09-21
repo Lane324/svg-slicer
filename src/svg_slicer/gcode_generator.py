@@ -33,7 +33,6 @@ class GcodePoint:
         Turns GcodePoint into gcode commands
 
         Args:
-            scale: scale factor to apply to coordinates
             options: slicer options for generating gcode
 
         Returns:
@@ -90,19 +89,10 @@ class GcodeGenerator:
             (shape_start.real, shape_start.imag),
         )
 
-        vector: complex = (shape_start - last_point) / distance
-
-        # print("==========")
-        # print(f"{shape_start=}")
-        # print(f"{last_point=}")
-        # print(f"{self.options.blade_offset=}")
-        # print("==========")
-        # print(f"{distance=}")
-        # print(f"{shape_start - last_point=}")
-        # print(f"{vector=}")
-        # print(f"{shape_start + self.options.blade_offset * vector=}")
-        # print("==========")
-
+        if not distance:
+            vector = complex(1, 1)
+        else:
+            vector: complex = (shape_start - last_point) / distance
         return shape_start + self.options.blade_offset * vector
 
     # pylint: disable=too-many-return-statements

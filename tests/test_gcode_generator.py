@@ -36,7 +36,7 @@ def test_gcode_point_correctly_creates_gcode(
     raised = False
     gcode_point = gcode_generator.GcodePoint(point=point, raised=raised)
 
-    gcode = gcode_point.get_gcode(scale=1.0, options=mock_slicing_options)
+    gcode = gcode_point.get_gcode(options=mock_slicing_options)
 
     assert gcode == [f"G1 X{int(point.real)} Y{int(point.imag)}"]
 
@@ -49,7 +49,7 @@ def test_gcode_point_correctly_creates_gcode_floating_points(
     raised = False
     gcode_point = gcode_generator.GcodePoint(point=point, raised=raised)
 
-    gcode = gcode_point.get_gcode(scale=1.0, options=mock_slicing_options)
+    gcode = gcode_point.get_gcode(options=mock_slicing_options)
 
     assert gcode == [f"G1 X{point.real} Y{point.imag}"]
 
@@ -62,7 +62,7 @@ def test_gcode_point_correctly_creates_gcode_raised(
     raised = True
     gcode_point = gcode_generator.GcodePoint(point=point, raised=raised)
 
-    gcode = gcode_point.get_gcode(scale=1.0, options=mock_slicing_options)
+    gcode = gcode_point.get_gcode(options=mock_slicing_options)
 
     assert gcode == [
         *mock_slicing_options.lift_gcode,
@@ -112,44 +112,6 @@ def test_getting_direction_between_points(
 
 
 # endregion
-# region GcodeGenerator._get_scale
-
-
-@pytest.mark.parametrize(
-    "x,y,scale",
-    [
-        (10.0, 10.0, 1.0),  # same size
-        (20.0, 20.0, 0.5),  # x double y double
-        (20.0, 10.0, 0.5),  # x double y same
-        (10.0, 20.0, 0.5),  # x same y double
-        (5.0, 5.0, 2.0),  # x half y half
-        (5.0, 10.0, 1.0),  # x half y same
-        (10.0, 5.0, 1.0),  # x same y half
-    ],
-)
-def test_scale_factors(
-    mock_slicing_options: slicing_options.SlicingOptions,
-    x: float,
-    y: float,
-    scale: float,
-):
-    """Test that getting scale factors for a given x and y coordinate"""
-    generator = gcode_generator.GcodeGenerator(mock_slicing_options)
-    generator.largest_x = x
-    generator.largest_y = y
-    assert scale == generator._get_scale()
-
-
-def test_scale_factors_no_max_point(
-    mock_slicing_options: slicing_options.SlicingOptions,
-):
-    """Test that getting scale factors for a given x and y coordinate"""
-    generator = gcode_generator.GcodeGenerator(mock_slicing_options)
-    generator.options.max_point = None
-    assert 1.0 == generator._get_scale()
-
-
-# endregion
 # region GcodeGenerator._line_to_points
 
 
@@ -159,7 +121,7 @@ def test_converting_line_to_points(mock_generator: gcode_generator.GcodeGenerato
     end = complex(100, 200)
     line = svgpathtools.Line(start, end)
 
-    assert mock_generator._line_to_points(line) == (start, end)
+    assert mock_generator._line_to_points(line) == [start, end]
     assert mock_generator.largest_x == end.real
     assert mock_generator.largest_y == end.imag
 
@@ -268,7 +230,7 @@ def test_extend_points_with_complex_numbers(
     point3 = complex(3, 3)
     new_points = (point1, point2, point3)
 
-    mock_generator._extend_gcode_points(new_points=new_points, raised=True)
+    mock_generator._extend_gcode_points(new_points=new_points, new_shape=True)
 
     assert mock_generator.points == [
         gcode_generator.GcodePoint(point1, True),
@@ -305,7 +267,7 @@ def test_getting_points_from_multiple_curves(
         control2=complex(2, 2),
         end=complex(50, 60),  # make it raise
     )
-    paths = ([line, arc], [quadricbezier_curve, cubicbezier_curve, svgpathtools.Path()])
+    paths = ([line, arc], [quadricbezier_curve, cubicbezier_curve])
 
     mock_line_to_points = mock.create_autospec(
         gcode_generator.GcodeGenerator._line_to_points, return_value=(complex(1, 1),)
@@ -342,7 +304,7 @@ def test_getting_points_from_multiple_curves(
 
     mock_generator._get_points(paths)
 
-    assert len(mock_generator.points) == 10
+    assert len(mock_generator.points) == 12
 
 
 # endregion
@@ -364,19 +326,14 @@ def test_generating_gcode(
         gcode_generator.GcodePoint(complex(2, 1), False),
         gcode_generator.GcodePoint(complex(1, 1), False),
     ]
-    scale = 1.0
 
     mock_svg2paths = mock.create_autospec(
-        svgpathtools.svg2paths, return_value=(None, None)
+        svgpathtools.svg2paths, return_value=((None, (None, None)), None)
     )
     monkeypatch.setattr(gcode_generator.svgpathtools, "svg2paths", mock_svg2paths)
 
     mock_get_points = mock.create_autospec(gcode_generator.GcodeGenerator._get_points)
     monkeypatch.setattr(gcode_generator.GcodeGenerator, "_get_points", mock_get_points)
-    mock_get_scale = mock.create_autospec(
-        gcode_generator.GcodeGenerator._get_scale, return_value=scale
-    )
-    monkeypatch.setattr(gcode_generator.GcodeGenerator, "_get_scale", mock_get_scale)
 
     mock_generator.points = points
     mock_generator.generate_gcode(svg_path)
@@ -384,7 +341,7 @@ def test_generating_gcode(
     expected_gcode = [
         *gcode_generator.HEADER,
         *mock_generator.options.start_gcode,
-        *[c for p in points for c in p.get_gcode(scale, mock_generator.options)],
+        *[c for p in points for c in p.get_gcode(mock_generator.options)],
         *mock_generator.options.end_gcode,
     ]
 

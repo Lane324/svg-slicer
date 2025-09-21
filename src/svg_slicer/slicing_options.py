@@ -134,8 +134,12 @@ class SlicingOptionsWiget(QWidget):
             ),
         )
 
-        self.curve_resolution_spinbox = LabeledSpinBox(label_text="Curve Resolution")
-        self.blade_offset_spinbox = LabeledDoubleSpinBox(label_text="Blade Offset")
+        self.curve_resolution_spinbox = LabeledSpinBox(
+            LabeledSpinBoxConfig(label="Curve Resolution")
+        )
+        self.blade_offset_spinbox = LabeledDoubleSpinBox(
+            LabeledSpinBoxConfig(label="Blade Offset")
+        )
 
         self.start_gcode_input = QTextEdit()
         self.end_gcode_input = QTextEdit()
@@ -202,7 +206,6 @@ class SlicingOptionsWiget(QWidget):
 
         self.point_feedrate_layout.addWidget(self.start_point_selector)
         self.point_feedrate_layout.addWidget(self.feedrate_selector)
-        self.curve_resolution_group
         self.point_feedrate_layout.addWidget(self.curve_resolution_group)
         self.start_gcode_layout.addWidget(self.start_gcode_input)
         self.end_gcode_layout.addWidget(self.end_gcode_input)

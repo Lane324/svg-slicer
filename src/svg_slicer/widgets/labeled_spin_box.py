@@ -1,3 +1,7 @@
+"""
+Custom widgets
+"""
+
 from typing import NamedTuple
 
 from PySide6.QtCore import Qt
@@ -13,6 +17,8 @@ from PySide6.QtWidgets import (
 
 
 class LabeledSpinBoxConfig(NamedTuple):
+    """Config data for labeled spin boxes"""
+
     label: str
     maximum: int | None = None
     minimum: int | None = None
@@ -21,14 +27,10 @@ class LabeledSpinBoxConfig(NamedTuple):
 
 
 class LabeledSpinBox(QWidget):
-    def __init__(
-        self,
-        label_text: str,
-        maximum: int | None = None,
-        minimum: int | None = None,
-        prefix: str | None = None,
-        suffix: str | None = None,
-    ):
+    """Labeled Spinbox widget"""
+
+    def __init__(self, config: LabeledSpinBoxConfig):
+        """Creates LabeledSpinBox widget"""
         super().__init__()
 
         self.spinbox: QSpinBox | QDoubleSpinBox
@@ -36,17 +38,17 @@ class LabeledSpinBox(QWidget):
 
         layout = QHBoxLayout()
         label = QLabel()
-        label.setText(label_text)
+        label.setText(config.label)
         label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
         self.spinbox = QSpinBox()
-        if maximum:
-            self.spinbox.setMaximum(maximum)
-        if minimum:
-            self.spinbox.setMinimum(minimum)
-        if prefix:
-            self.spinbox.setPrefix(prefix)
-        if suffix:
-            self.spinbox.setSuffix(suffix)
+        if config.maximum:
+            self.spinbox.setMaximum(config.maximum)
+        if config.minimum:
+            self.spinbox.setMinimum(config.minimum)
+        if config.prefix:
+            self.spinbox.setPrefix(config.prefix)
+        if config.suffix:
+            self.spinbox.setSuffix(config.suffix)
 
         layout.addWidget(label)
         layout.addWidget(self.spinbox)
@@ -54,31 +56,27 @@ class LabeledSpinBox(QWidget):
 
 
 class LabeledDoubleSpinBox(QWidget):
-    def __init__(
-        self,
-        label_text: str,
-        maximum: int | None = None,
-        minimum: int | None = None,
-        prefix: str | None = None,
-        suffix: str | None = None,
-    ):
+    """Labeled Double Spinbox widget"""
+
+    def __init__(self, config):
+        """Creates LabeledDoubleSpinBox widget"""
         super().__init__()
 
         self.value: float = 0.0
 
         layout = QHBoxLayout()
         label = QLabel()
-        label.setText(label_text)
+        label.setText(config.label)
         label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
         self.spinbox = QDoubleSpinBox()
-        if maximum:
-            self.spinbox.setMaximum(maximum)
-        if minimum:
-            self.spinbox.setMinimum(minimum)
-        if prefix:
-            self.spinbox.setPrefix(prefix)
-        if suffix:
-            self.spinbox.setSuffix(suffix)
+        if config.maximum:
+            self.spinbox.setMaximum(config.maximum)
+        if config.minimum:
+            self.spinbox.setMinimum(config.minimum)
+        if config.prefix:
+            self.spinbox.setPrefix(config.prefix)
+        if config.suffix:
+            self.spinbox.setSuffix(config.suffix)
 
         layout.addWidget(label)
         layout.addWidget(self.spinbox)
@@ -86,24 +84,21 @@ class LabeledDoubleSpinBox(QWidget):
 
 
 class MultiLabeledSpinBox(QWidget):
+    """Multi Labeled Spinbox widget"""
+
     def __init__(
         self,
         title: str,
         configs: tuple[LabeledSpinBoxConfig, ...],
     ):
+        """Creates MultiLabeledSpinBox widget"""
         super().__init__()
         self.group_box = QGroupBox(title=title)
         spinbox_layout = QVBoxLayout()
 
         self.spinboxes: list[LabeledSpinBox] = []
         for config in configs:
-            new_widget = LabeledSpinBox(
-                label_text=config.label,
-                maximum=config.maximum,
-                minimum=config.minimum,
-                prefix=config.prefix,
-                suffix=config.suffix,
-            )
+            new_widget = LabeledSpinBox(config)
             self.spinboxes.append(new_widget)
             spinbox_layout.addWidget(new_widget)
 
@@ -115,24 +110,21 @@ class MultiLabeledSpinBox(QWidget):
 
 
 class MultiLabeledDoubleSpinBox(QWidget):
+    """Labeled Spinbox widget"""
+
     def __init__(
         self,
         title: str,
         configs: tuple[LabeledSpinBoxConfig, ...],
     ):
+        """Creates MultiLabeledDoubleSpinBox widget"""
         super().__init__()
         self.group_box = QGroupBox(title=title)
         spinbox_layout = QVBoxLayout()
 
         self.spinboxes: list[LabeledDoubleSpinBox] = []
         for config in configs:
-            new_widget = LabeledDoubleSpinBox(
-                label_text=config.label,
-                maximum=config.maximum,
-                minimum=config.minimum,
-                prefix=config.prefix,
-                suffix=config.suffix,
-            )
+            new_widget = LabeledDoubleSpinBox(config)
             self.spinboxes.append(new_widget)
             spinbox_layout.addWidget(new_widget)
 

@@ -7,7 +7,6 @@ from unittest import mock
 
 import pytest
 import tomli_w
-from PySide6.QtWidgets import QTextEdit
 from pytestqt.qtbot import QtBot
 
 from svg_slicer import helpers, slicing_options
@@ -57,7 +56,6 @@ def test_slicing_get_dict():
     """Tests that turning the slicing options into a dict returns correct dict"""
 
     start_point = complex(1, 2)
-    max_point = complex(10, 20)
     normal_feedrate = 500
     travel_feedrate = 4000
     curve_resolution = 20
@@ -68,7 +66,6 @@ def test_slicing_get_dict():
 
     options = slicing_options.SlicingOptions(
         start_point=start_point,
-        max_point=max_point,
         normal_feedrate=normal_feedrate,
         travel_feedrate=travel_feedrate,
         curve_resolution=curve_resolution,
@@ -93,8 +90,6 @@ def test_slicing_get_dict():
         "point": {
             "start_x": start_point.real,
             "start_y": start_point.imag,
-            "max_x": max_point.real,
-            "max_y": max_point.imag,
         },
     }
 
@@ -103,7 +98,6 @@ def test_slicing_get_dict_no_max_point():
     """Tests that turning the slicing options into a dict returns correct dict with no max point"""
 
     start_point = complex(1, 2)
-    max_point = None
     normal_feedrate = 500
     travel_feedrate = 4000
     curve_resolution = 20
@@ -114,7 +108,6 @@ def test_slicing_get_dict_no_max_point():
 
     options = slicing_options.SlicingOptions(
         start_point=start_point,
-        max_point=max_point,
         normal_feedrate=normal_feedrate,
         travel_feedrate=travel_feedrate,
         curve_resolution=curve_resolution,
@@ -139,8 +132,6 @@ def test_slicing_get_dict_no_max_point():
         "point": {
             "start_x": start_point.real,
             "start_y": start_point.imag,
-            "max_x": None,
-            "max_y": None,
         },
     }
 
@@ -277,11 +268,7 @@ def test_changing_text_boxes_updates_options(
     widget = slicing_options.SlicingOptionsWiget(options=mock_slicing_options)
     qtbot.addWidget(widget)
 
-    if not mock_slicing_options.max_point:
-        mock_slicing_options.max_point = complex(1, 1)
-
     new_start_point = mock_slicing_options.start_point + complex(1, 1)
-    new_max_point = mock_slicing_options.max_point + complex(1, 1)
     new_normal_feedrate = mock_slicing_options.normal_feedrate + 1
     new_travel_feedrate = mock_slicing_options.travel_feedrate + 1
     new_curve_resolution = mock_slicing_options.curve_resolution + 1
@@ -292,7 +279,6 @@ def test_changing_text_boxes_updates_options(
 
     new_options = slicing_options.SlicingOptions(
         start_point=new_start_point,
-        max_point=new_max_point,
         normal_feedrate=new_normal_feedrate,
         travel_feedrate=new_travel_feedrate,
         curve_resolution=new_curve_resolution,
@@ -309,12 +295,6 @@ def test_changing_text_boxes_updates_options(
     )
     assert widget.start_point_selector.spinboxes[0].spinbox.value() == int(
         new_start_point.imag
-    )
-    assert widget.max_point_selector.spinboxes[0].spinbox.value() == int(
-        new_max_point.real
-    )
-    assert widget.max_point_selector.spinboxes[1].spinbox.value() == int(
-        new_max_point.imag
     )
     assert widget.feedrate_selector.spinboxes[0].spinbox.value() == int(
         new_normal_feedrate
@@ -336,11 +316,7 @@ def test_changing_text_boxes_updates_options_no_max_point(
     widget = slicing_options.SlicingOptionsWiget(options=mock_slicing_options)
     qtbot.addWidget(widget)
 
-    if not mock_slicing_options.max_point:
-        mock_slicing_options.max_point = complex(1, 1)
-
     new_start_point = mock_slicing_options.start_point + complex(1, 1)
-    new_max_point = None
     new_normal_feedrate = mock_slicing_options.normal_feedrate + 1
     new_travel_feedrate = mock_slicing_options.travel_feedrate + 1
     new_curve_resolution = mock_slicing_options.curve_resolution + 1
@@ -351,7 +327,6 @@ def test_changing_text_boxes_updates_options_no_max_point(
 
     new_options = slicing_options.SlicingOptions(
         start_point=new_start_point,
-        max_point=new_max_point,
         normal_feedrate=new_normal_feedrate,
         travel_feedrate=new_travel_feedrate,
         curve_resolution=new_curve_resolution,
@@ -369,8 +344,6 @@ def test_changing_text_boxes_updates_options_no_max_point(
     assert widget.start_point_selector.spinboxes[0].spinbox.value() == int(
         new_start_point.imag
     )
-    assert widget.max_point_selector.spinboxes[0].spinbox.value() == 0
-    assert widget.max_point_selector.spinboxes[1].spinbox.value() == 0
     assert widget.feedrate_selector.spinboxes[0].spinbox.value() == int(
         new_normal_feedrate
     )
@@ -628,9 +601,6 @@ def test_loading_options_from_file(
     if start_point:
         data["point"]["start_x"] = start_point.real
         data["point"]["start_y"] = start_point.imag
-    if max_point:
-        data["point"]["max_x"] = max_point.real
-        data["point"]["max_y"] = max_point.imag
 
     toml_file = tmp_path / "temp.toml"
     with toml_file.open("wb") as f:
@@ -681,7 +651,6 @@ def test_loading_options_from_file(
         if start_point
         else slicing_options.DEFAULT_START_POINT
     )
-    assert widget.options.max_point == max_point
 
 
 # endregion
@@ -727,7 +696,6 @@ def test_loading_default_options_from_file_that_doesnt_exist(
     qtbot.addWidget(widget)
 
     assert widget.options.start_point == slicing_options.DEFAULT_START_POINT
-    assert widget.options.max_point == slicing_options.DEFAULT_MAX_POINT
     assert widget.options.normal_feedrate == slicing_options.DEFAULT_NORMAL_FEEDRATE
     assert widget.options.travel_feedrate == slicing_options.DEFAULT_TRAVEL_FEEDRATE
     assert widget.options.curve_resolution == slicing_options.DEFAULT_CURVE_RESOLUTION
